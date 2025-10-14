@@ -159,27 +159,6 @@ curl http://localhost:3000/v1/chat/completions \
 curl http://localhost:3000/health
 ```
 
-## Default Models
-
-The system comes pre-configured with:
-
-**Featherless:**
-- `meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo`
-- `Qwen/QwQ-32B-Preview`
-
-**iFlow:**
-- `Qwen/Qwen2.5-Coder-32B-Instruct`
-- `deepseek-ai/DeepSeek-V3`
-
-**Sonnet (Claude):**
-- `claude-3-5-sonnet-20241022`
-- `claude-sonnet-4-20250514`
-
-**HuggingFace:**
-- `meta-llama/Llama-3.3-70B-Instruct`
-
-You can add, edit, or remove models through the admin UI.
-
 ## Adding Custom Providers
 
 1. Login to admin UI
