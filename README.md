@@ -4,16 +4,34 @@ A lightweight, zero-dependency OpenAI-compatible API proxy server for routing re
 
 ## Features
 
-- ✨ **Zero dependencies** - Uses only Node.js native modules
-- 🚀 **Ultra lightweight** - ~5-10MB memory footprint (perfect for Render free tier)
-- ⚡ **Fast startup** - No npm install needed in production
-- 🔒 **Multi-user API keys** - Create separate API keys for each user
-- 🎯 **Multi-provider** - Supports multiple AI providers
-- 🐳 **Docker ready** - Includes optimized Dockerfile
-- 🌐 **OpenAI compatible** - Standard OpenAI API format
-- 🎨 **Web UI** - Beautiful admin panel to manage everything
-- 💾 **Local database** - JSON-based storage (no external DB required)
-- ☁️ **Render ready** - Optimized for free tier deployment
+### 🎯 Zero Dependencies - Our Superpower!
+
+**Why zero dependencies matter:**
+- ✅ **No security vulnerabilities** - No third-party packages = no CVEs to patch
+- ✅ **Instant deployment** - No `npm install` needed (saves 30+ seconds on each deploy)
+- ✅ **Smaller Docker images** - Only ~40MB vs 200MB+ with dependencies
+- ✅ **No breaking changes** - No dependency updates to worry about
+- ✅ **Production ready** - No node_modules folder chaos
+- ✅ **Perfect for free tiers** - Minimal disk space and memory usage
+
+**Built with only Node.js native modules:**
+- `http` / `https` - For server and API requests
+- `fs` - For database operations
+- `path` - For file paths
+- `url` - For URL parsing
+
+### 🚀 Other Features
+
+- **Ultra lightweight** - ~5-10MB memory footprint (perfect for Render free tier)
+- **Fast startup** - <200ms cold start
+- **Multi-user API keys** - Create separate API keys for each user with model restrictions
+- **Multi-provider** - Supports multiple AI providers (OpenAI-compatible)
+- **Docker ready** - Optimized Dockerfile with health checks
+- **OpenAI compatible** - Standard OpenAI API format
+- **Web UI** - Beautiful admin panel to manage everything
+- **Local database** - JSON-based storage (no external DB required)
+- **Auto health checks** - Keeps your app alive on free tiers
+- **Built-in chat interface** - Test models and API keys instantly
 
 ## Quick Start
 
@@ -25,7 +43,7 @@ node server.js
 
 # 2. Access admin UI
 # Open http://localhost:3000 in your browser
-# Login: syaikhipin / 12345678
+# Login with your UI_USERNAME / UI_PASSWORD from .env
 ```
 
 ### Docker
@@ -37,7 +55,7 @@ docker build -t ipin-proxy .
 # Run container
 docker run -d \
   -p 3000:3000 \
-  -e IPIN_MASTER_KEY="sk-julio1234" \
+  -e MASTER_API_KEY="sk-your-secret-key" \
   -e UI_USERNAME="admin" \
   -e UI_PASSWORD="your-password" \
   -v $(pwd)/ipin-proxy.db:/app/ipin-proxy.db \
@@ -50,18 +68,12 @@ docker run -d \
 ### Environment Variables
 
 ```bash
-# API Master Key (for API requests)
-IPIN_MASTER_KEY=sk-julio1234
+# API Master Key (has access to all models)
+MASTER_API_KEY=sk-your-secret-key
 
 # Admin UI Credentials
-UI_USERNAME=syaikhipin
-UI_PASSWORD=12345678
-
-# Optional: Pre-configure provider API keys
-FEATHERLESS_API_KEY_CUSTOM=your-key
-IFLOW_API_KEY_CUSTOM=your-key
-SONNET_API_KEY_CUSTOM=your-key
-HUGGINGFACE_API_KEY=your-key
+UI_USERNAME=admin
+UI_PASSWORD=your-password
 ```
 
 ## Admin UI
@@ -122,7 +134,7 @@ Authorization: Bearer sk-123
 
 ```bash
 curl http://localhost:3000/v1/models \
-  -H "Authorization: Bearer sk-julio1234"
+  -H "Authorization: Bearer sk-your-api-key"
 ```
 
 ### Chat Completion
@@ -130,9 +142,9 @@ curl http://localhost:3000/v1/models \
 ```bash
 curl http://localhost:3000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer sk-julio1234" \
+  -H "Authorization: Bearer sk-your-api-key" \
   -d '{
-    "model": "claude-3-5-sonnet-20241022",
+    "model": "claude-sonnet-4-5",
     "messages": [
       {"role": "user", "content": "Hello!"}
     ],
@@ -235,7 +247,7 @@ A built-in chat interface is available for testing your API keys and models:
 
 ## Security
 
-1. **API Authentication**: Uses `IPIN_MASTER_KEY` for API requests
+1. **API Authentication**: Uses `MASTER_API_KEY` for API requests
 2. **Admin Authentication**: Separate credentials for web UI (`UI_USERNAME` / `UI_PASSWORD`)
 3. **Password Storage**: API keys encrypted in session storage (base64)
 4. **CORS**: Enabled for all origins (customize in production)
@@ -246,7 +258,7 @@ A built-in chat interface is available for testing your API keys and models:
 # Change default credentials
 export UI_USERNAME="your-admin-username"
 export UI_PASSWORD="strong-password-here"
-export IPIN_MASTER_KEY="sk-your-secret-key"
+export MASTER_API_KEY="sk-your-secret-key"
 
 # Run with HTTPS reverse proxy (nginx, caddy)
 # Restrict CORS origins
@@ -274,7 +286,7 @@ Render's free tier is perfect for this lightweight proxy!
 2. Connect to Render
 3. It will auto-detect `render.yaml` and deploy
 4. Set these environment variables in Render dashboard:
-   - `IPIN_MASTER_KEY` (auto-generated or custom)
+   - `MASTER_API_KEY` (auto-generated or custom)
    - `UI_USERNAME` (your admin username)
    - `UI_PASSWORD` (auto-generated or custom)
 
@@ -289,11 +301,48 @@ Render's free tier is perfect for this lightweight proxy!
    - **Plan**: Free
 4. Add environment variables (same as above)
 
-**Important for Render:**
-- Free tier spins down after 15 minutes of inactivity
+**Important for Render Free Tier:**
+- Spins down after 15 minutes of inactivity
 - First request after spin-down takes ~30 seconds
 - Memory limit: 512MB (this app uses ~5-10MB)
-- Database file persists between restarts
+- **Database persistence:** Free tier has read-only filesystem, so the app automatically uses `/tmp` for database storage
+  - **Data will reset on each restart/redeploy**
+  - **Optional:** Upload your database to "Secret Files" as `ipin-proxy.db` - it will be copied to `/tmp` on startup
+  - You'll need to reconfigure providers/models via Admin UI after each restart
+  - **For persistent storage**, upgrade to a paid plan with Disk support
+
+**Keep Your App Alive (Avoid Cold Starts):**
+
+The Dockerfile includes automatic health checks every 30 seconds:
+```dockerfile
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3
+```
+
+To keep your free-tier app always warm, use a free cron service to ping it:
+
+1. **UptimeRobot** (https://uptimerobot.com) - Free monitoring
+   - Add HTTP(s) monitor
+   - URL: `https://your-app.onrender.com/health`
+   - Interval: Every 5 minutes
+   - ✅ Keeps your app alive 24/7
+
+2. **Cron-job.org** (https://cron-job.org) - Free cron jobs
+   - Create new cron job
+   - URL: `https://your-app.onrender.com/health`
+   - Schedule: */5 * * * * (every 5 minutes)
+   - ✅ Prevents cold starts
+
+3. **BetterUptime** (https://betteruptime.com) - Free monitoring
+   - Add HTTP monitor
+   - URL: `https://your-app.onrender.com/health`
+   - Interval: 3 minutes
+   - ✅ Also alerts you if it goes down
+
+**Why health checks matter:**
+- ✅ Prevents 30-second cold start delays
+- ✅ Instant response for your users
+- ✅ Free to set up
+- ✅ Works with Render's free tier limits
 
 ### Railway
 
@@ -308,9 +357,9 @@ railway up
 
 ```bash
 heroku create ipin-proxy
-heroku config:set IPIN_MASTER_KEY="your-key"
+heroku config:set MASTER_API_KEY="sk-your-secret-key"
 heroku config:set UI_USERNAME="admin"
-heroku config:set UI_PASSWORD="password"
+heroku config:set UI_PASSWORD="your-password"
 git push heroku main
 ```
 

@@ -1,18 +1,48 @@
 const fs = require('fs');
+const path = require('path');
 
 // Simple JSON database without dependencies
 class Database {
   constructor(filepath) {
-    this.filepath = filepath;
+    // Use /tmp on read-only filesystems (like Render free tier)
+    this.originalPath = filepath;
+    this.filepath = this.getWritablePath(filepath);
     this.data = { providers: [], models: [], apiKeys: [] };
     this.load();
   }
 
+  // Find a writable location for the database
+  getWritablePath(filepath) {
+    // Try to write to the original path first
+    try {
+      const testPath = filepath + '.test';
+      fs.writeFileSync(testPath, 'test', 'utf8');
+      fs.unlinkSync(testPath);
+      console.log(`✅ Using database path: ${filepath}`);
+      return filepath;
+    } catch (error) {
+      // If original path is not writable, use /tmp
+      const tmpPath = path.join('/tmp', path.basename(filepath));
+      console.log(`⚠️  Original path not writable, using: ${tmpPath}`);
+      console.log('💡 Note: Data will reset on restart. Configure via Admin UI after each deployment.');
+      return tmpPath;
+    }
+  }
+
   load() {
     try {
+      // First try to copy from /etc/secrets if it exists (Render Secret Files)
+      const secretPath = path.join('/etc/secrets', path.basename(this.originalPath));
+      if (fs.existsSync(secretPath) && !fs.existsSync(this.filepath)) {
+        console.log(`📋 Copying initial database from ${secretPath}`);
+        const secretContent = fs.readFileSync(secretPath, 'utf8');
+        fs.writeFileSync(this.filepath, secretContent, 'utf8');
+      }
+
       if (fs.existsSync(this.filepath)) {
         const content = fs.readFileSync(this.filepath, 'utf8');
         this.data = JSON.parse(content);
+        console.log('✅ Database loaded successfully');
       } else {
         // Initialize empty database - configure via Admin UI
         console.log('⚠️  Database file not found. Creating empty database.');
@@ -36,6 +66,7 @@ class Database {
       fs.writeFileSync(this.filepath, JSON.stringify(this.data, null, 2), 'utf8');
     } catch (error) {
       console.error('Error saving database:', error);
+      throw error;
     }
   }
 

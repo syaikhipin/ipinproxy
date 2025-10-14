@@ -32,7 +32,7 @@
 3. **Set Environment Variables**
    In Render dashboard, set:
    ```
-   IPIN_MASTER_KEY=sk-<generate-random-string>
+   MASTER_API_KEY=sk-<generate-random-string>
    UI_USERNAME=admin
    UI_PASSWORD=<strong-password>
    ```
@@ -131,7 +131,7 @@ Set environment variables in Railway dashboard.
 
 ```bash
 heroku create ipin-proxy
-heroku config:set IPIN_MASTER_KEY="sk-xxx"
+heroku config:set MASTER_API_KEY="sk-xxx"
 heroku config:set UI_USERNAME="admin"
 heroku config:set UI_PASSWORD="xxx"
 git push heroku main
@@ -143,7 +143,7 @@ git push heroku main
 docker build -t ipin-proxy .
 docker run -d \
   -p 3000:3000 \
-  -e IPIN_MASTER_KEY="sk-xxx" \
+  -e MASTER_API_KEY="sk-xxx" \
   -e UI_USERNAME="admin" \
   -e UI_PASSWORD="xxx" \
   -v $(pwd)/ipin-proxy.db:/app/ipin-proxy.db \

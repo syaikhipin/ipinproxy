@@ -2,15 +2,10 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-
-# Install dependencies
-RUN npm ci --only=production
-
-# Copy source code
+# Copy source code (zero dependencies, no npm install needed)
 COPY server.js .
 COPY database.js .
+COPY package.json .
 COPY public ./public
 
 # Create non-root user

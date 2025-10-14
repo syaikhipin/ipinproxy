@@ -8,7 +8,7 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: IPIN_MASTER_KEY
+      - key: MASTER_API_KEY
         generateValue: true
       - key: UI_USERNAME
         value: admin
