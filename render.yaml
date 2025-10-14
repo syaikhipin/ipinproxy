@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: ipin-proxy
+    env: node
+    plan: free
+    buildCommand: "echo 'No build needed'"
+    startCommand: "node server.js"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: IPIN_MASTER_KEY
+        generateValue: true
+      - key: UI_USERNAME
+        value: admin
+      - key: UI_PASSWORD
+        generateValue: true
+    healthCheckPath: /health
+    autoDeploy: true

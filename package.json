@@ -1,0 +1,25 @@
+{
+  "name": "ipin-proxy",
+  "version": "1.0.0",
+  "description": "Lightweight multi-provider AI proxy server with zero dependencies",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "ipin",
+    "proxy",
+    "ai",
+    "llm",
+    "openai",
+    "claude",
+    "huggingface",
+    "lightweight"
+  ],
+  "author": "syaikhipin",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
