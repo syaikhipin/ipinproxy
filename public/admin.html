@@ -291,6 +291,7 @@
       <button class="tab" onclick="switchTab('models', event)">Models</button>
       <button class="tab" onclick="switchTab('apikeys', event)">API Keys</button>
       <button class="tab" onclick="switchTab('chat', event)">💬 Chat</button>
+      <button class="tab" onclick="switchTab('apidocs', event)">📚 API Docs</button>
     </div>
 
     <div class="content">
@@ -376,6 +377,53 @@
           <div style="display: flex; gap: 10px;">
             <textarea id="chat-input" placeholder="Type your message here... (Press Ctrl+Enter to send)" style="flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; min-height: 80px;"></textarea>
             <button class="btn" id="chat-send-btn" onclick="sendChatMessage()" style="padding: 12px 24px;">Send</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- API Docs Tab -->
+      <div id="apidocs-tab" class="tab-content">
+        <div style="margin-bottom: 20px;">
+          <h3 style="font-size: 20px; margin-bottom: 10px; color: #374151;">API Documentation & Code Examples</h3>
+          <p style="color: #666; font-size: 14px;">Select a model to generate code examples for curl, Python, and Node.js</p>
+        </div>
+
+        <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+          <label style="display: block; font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">Select Model</label>
+          <select id="apidocs-model-select" onchange="generateApiDocs()" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+            <option value="">Choose a model...</option>
+          </select>
+        </div>
+
+        <div id="apidocs-content" style="display: none;">
+          <div style="margin-bottom: 30px;">
+            <h4 style="font-size: 16px; font-weight: 600; color: #374151; margin-bottom: 15px;">📋 cURL</h4>
+            <div style="position: relative;">
+              <button onclick="copyCode('apidocs-curl')" style="position: absolute; top: 10px; right: 10px; padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Copy</button>
+              <pre id="apidocs-curl" style="background: #1e293b; color: #e2e8f0; padding: 20px; border-radius: 8px; overflow-x: auto; font-size: 13px; line-height: 1.6;"></pre>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 30px;">
+            <h4 style="font-size: 16px; font-weight: 600; color: #374151; margin-bottom: 15px;">🐍 Python</h4>
+            <div style="position: relative;">
+              <button onclick="copyCode('apidocs-python')" style="position: absolute; top: 10px; right: 10px; padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Copy</button>
+              <pre id="apidocs-python" style="background: #1e293b; color: #e2e8f0; padding: 20px; border-radius: 8px; overflow-x: auto; font-size: 13px; line-height: 1.6;"></pre>
+            </div>
+          </div>
+
+          <div style="margin-bottom: 30px;">
+            <h4 style="font-size: 16px; font-weight: 600; color: #374151; margin-bottom: 15px;">📦 Node.js</h4>
+            <div style="position: relative;">
+              <button onclick="copyCode('apidocs-nodejs')" style="position: absolute; top: 10px; right: 10px; padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Copy</button>
+              <pre id="apidocs-nodejs" style="background: #1e293b; color: #e2e8f0; padding: 20px; border-radius: 8px; overflow-x: auto; font-size: 13px; line-height: 1.6;"></pre>
+            </div>
+          </div>
+
+          <div style="padding: 15px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px;">
+            <p style="color: #92400e; font-size: 14px; margin: 0;">
+              <strong>💡 Tip:</strong> Replace <code style="background: #fde68a; padding: 2px 6px; border-radius: 3px;">YOUR_API_KEY</code> with your actual API key from the "API Keys" tab.
+            </p>
           </div>
         </div>
       </div>

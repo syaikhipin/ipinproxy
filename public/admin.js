@@ -642,4 +642,137 @@ switchTab = function(tab, e) {
   if (tab === 'chat') {
     loadChatModels();
   }
+  if (tab === 'apidocs') {
+    loadApiDocsModels();
+  }
 };
+
+// API Docs functionality
+async function loadApiDocsModels() {
+  try {
+    const models = await apiCall('/api/admin/models');
+    const select = document.getElementById('apidocs-model-select');
+
+    select.innerHTML = '<option value="">Choose a model...</option>';
+    models.forEach(model => {
+      const option = document.createElement('option');
+      option.value = model.id;
+      option.textContent = `${model.name} (${model.id})`;
+      select.appendChild(option);
+    });
+  } catch (error) {
+    console.error('Failed to load models for API docs:', error);
+  }
+}
+
+function generateApiDocs() {
+  const modelId = document.getElementById('apidocs-model-select').value;
+  if (!modelId) {
+    document.getElementById('apidocs-content').style.display = 'none';
+    return;
+  }
+
+  document.getElementById('apidocs-content').style.display = 'block';
+
+  const apiUrl = window.location.origin;
+
+  // Generate cURL example
+  const curlCode = `curl ${apiUrl}/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -d '{
+    "model": "${modelId}",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello! How are you?"
+      }
+    ],
+    "max_tokens": 1000,
+    "temperature": 0.7
+  }'`;
+
+  // Generate Python example
+  const pythonCode = `import requests
+
+url = "${apiUrl}/v1/chat/completions"
+headers = {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer YOUR_API_KEY"
+}
+
+data = {
+    "model": "${modelId}",
+    "messages": [
+        {
+            "role": "user",
+            "content": "Hello! How are you?"
+        }
+    ],
+    "max_tokens": 1000,
+    "temperature": 0.7
+}
+
+response = requests.post(url, headers=headers, json=data)
+result = response.json()
+print(result["choices"][0]["message"]["content"])`;
+
+  // Generate Node.js example
+  const nodejsCode = `const fetch = require('node-fetch');
+
+const url = '${apiUrl}/v1/chat/completions';
+const headers = {
+  'Content-Type': 'application/json',
+  'Authorization': 'Bearer YOUR_API_KEY'
+};
+
+const data = {
+  model: '${modelId}',
+  messages: [
+    {
+      role: 'user',
+      content: 'Hello! How are you?'
+    }
+  ],
+  max_tokens: 1000,
+  temperature: 0.7
+};
+
+fetch(url, {
+  method: 'POST',
+  headers: headers,
+  body: JSON.stringify(data)
+})
+  .then(res => res.json())
+  .then(result => {
+    console.log(result.choices[0].message.content);
+  })
+  .catch(error => {
+    console.error('Error:', error);
+  });`;
+
+  document.getElementById('apidocs-curl').textContent = curlCode;
+  document.getElementById('apidocs-python').textContent = pythonCode;
+  document.getElementById('apidocs-nodejs').textContent = nodejsCode;
+}
+
+function copyCode(elementId) {
+  const element = document.getElementById(elementId);
+  const text = element.textContent;
+
+  navigator.clipboard.writeText(text).then(() => {
+    // Visual feedback
+    const button = element.previousElementSibling;
+    const originalText = button.textContent;
+    button.textContent = '✓ Copied!';
+    button.style.background = '#10b981';
+
+    setTimeout(() => {
+      button.textContent = originalText;
+      button.style.background = '#667eea';
+    }, 2000);
+  }).catch(err => {
+    console.error('Failed to copy code:', err);
+    alert('Failed to copy code to clipboard');
+  });
+}
