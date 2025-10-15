@@ -650,18 +650,25 @@ switchTab = function(tab, e) {
 // API Docs functionality
 async function loadApiDocsModels() {
   try {
-    const models = await apiCall('/api/admin/models');
+    const data = await apiCall('/api/admin/models');
     const select = document.getElementById('apidocs-model-select');
 
     select.innerHTML = '<option value="">Choose a model...</option>';
-    models.forEach(model => {
-      const option = document.createElement('option');
-      option.value = model.id;
-      option.textContent = `${model.name} (${model.id})`;
-      select.appendChild(option);
-    });
+
+    if (data.models && data.models.length > 0) {
+      data.models.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.id;
+        option.textContent = `${model.name} (${model.id})`;
+        select.appendChild(option);
+      });
+    } else {
+      select.innerHTML = '<option value="">No models available</option>';
+    }
   } catch (error) {
     console.error('Failed to load models for API docs:', error);
+    const select = document.getElementById('apidocs-model-select');
+    select.innerHTML = '<option value="">Error loading models</option>';
   }
 }
 
