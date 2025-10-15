@@ -292,10 +292,12 @@ Render's free tier is perfect for this lightweight proxy!
 
 **Keep Your App Alive (Avoid Cold Starts):**
 
-The Dockerfile includes automatic health checks every 30 seconds:
+The Dockerfile includes automatic health checks every 30 seconds (automatically adapts to Render's PORT):
 ```dockerfile
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3
 ```
+
+**Note:** Render automatically assigns port 10000 (via PORT env var), but the app handles this automatically.
 
 To keep your free-tier app always warm, use a free cron service to ping it:
 
