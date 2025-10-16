@@ -88,7 +88,28 @@ function showAddProviderModal() {
   document.getElementById('provider-id').value = '';
   document.getElementById('provider-is-edit').value = '';
   document.getElementById('provider-id-input').disabled = false;
+
+  // Reset API key visibility toggle to hidden state
+  const apiKeyInput = document.getElementById('provider-api-key');
+  apiKeyInput.type = 'password';
+  document.getElementById('provider-api-key-toggle-text').textContent = 'Show';
+  delete apiKeyInput.dataset.originalKey;
+
   showModal('provider-modal');
+}
+
+// Toggle provider API key visibility
+function toggleProviderApiKeyVisibility() {
+  const apiKeyInput = document.getElementById('provider-api-key');
+  const toggleText = document.getElementById('provider-api-key-toggle-text');
+
+  if (apiKeyInput.type === 'password') {
+    apiKeyInput.type = 'text';
+    toggleText.textContent = 'Hide';
+  } else {
+    apiKeyInput.type = 'password';
+    toggleText.textContent = 'Show';
+  }
 }
 
 function editProvider(id) {
@@ -102,7 +123,16 @@ function editProvider(id) {
   document.getElementById('provider-id-input').disabled = true; // Can't change ID when editing
   document.getElementById('provider-name').value = provider.name;
   document.getElementById('provider-base-url').value = provider.baseUrl;
-  document.getElementById('provider-api-key').value = provider.apiKey;
+
+  // Store the original API key for comparison
+  const apiKeyInput = document.getElementById('provider-api-key');
+  apiKeyInput.value = provider.apiKey;
+  apiKeyInput.dataset.originalKey = provider.apiKey;
+
+  // Reset visibility toggle to hidden state
+  apiKeyInput.type = 'password';
+  document.getElementById('provider-api-key-toggle-text').textContent = 'Show';
+
   document.getElementById('provider-type').value = provider.type;
   document.getElementById('provider-enabled').checked = provider.enabled;
   showModal('provider-modal');
