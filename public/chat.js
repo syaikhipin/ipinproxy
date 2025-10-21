@@ -260,6 +260,12 @@ async function sendMessage() {
     }
 
     const data = await response.json();
+
+    // Validate response structure
+    if (!data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
+      throw new Error('Invalid response format from API');
+    }
+
     const assistantMessage = data.choices[0].message.content;
 
     // Format model name for display

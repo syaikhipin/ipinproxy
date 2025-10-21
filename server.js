@@ -213,6 +213,11 @@ function transformHuggingFaceRequest(messages, params) {
 
 // Transform HuggingFace response to OpenAI format
 function transformHuggingFaceResponse(hfResponse, model) {
+  // Validate HuggingFace response format
+  if (!Array.isArray(hfResponse) || hfResponse.length === 0) {
+    throw new Error('Invalid HuggingFace response format: expected non-empty array');
+  }
+
   const text = hfResponse[0]?.generated_text || '';
 
   return {
