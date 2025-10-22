@@ -110,7 +110,7 @@
   <div class="login-container">
     <div class="logo">
       <h1>🚀 iPin Proxy</h1>
-      <p>Admin Panel Login</p>
+      <p>Login to your account</p>
     </div>
 
     <div id="error" class="error"></div>
@@ -126,6 +126,13 @@
         <input type="password" id="password" required autocomplete="current-password">
       </div>
 
+      <div class="form-group">
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+          <input type="checkbox" id="is-admin" style="width: auto;">
+          <span>Login as Admin</span>
+        </label>
+      </div>
+
       <button type="submit" class="btn" id="submit-btn">Login</button>
     </form>
   </div>
@@ -138,6 +145,8 @@
     // Check if already logged in
     if (localStorage.getItem('admin_token')) {
       window.location.href = '/admin.html';
+    } else if (localStorage.getItem('user_token')) {
+      window.location.href = '/user.html';
     }
 
     loginForm.addEventListener('submit', async (e) => {
@@ -145,13 +154,16 @@
 
       const username = document.getElementById('username').value;
       const password = document.getElementById('password').value;
+      const isAdmin = document.getElementById('is-admin').checked;
 
       errorDiv.classList.remove('show');
       submitBtn.disabled = true;
       submitBtn.textContent = 'Logging in...';
 
       try {
-        const response = await fetch('/api/admin/login', {
+        const endpoint = isAdmin ? '/api/admin/login' : '/api/user/login';
+
+        const response = await fetch(endpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -162,8 +174,13 @@
         const data = await response.json();
 
         if (response.ok) {
-          localStorage.setItem('admin_token', data.token);
-          window.location.href = '/admin.html';
+          if (isAdmin) {
+            localStorage.setItem('admin_token', data.token);
+            window.location.href = '/admin.html';
+          } else {
+            localStorage.setItem('user_token', data.token);
+            window.location.href = '/user.html';
+          }
         } else {
           errorDiv.textContent = data.error || 'Login failed';
           errorDiv.classList.add('show');

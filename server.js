@@ -3,6 +3,7 @@ const https = require('https');
 const { URL } = require('url');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const Database = require('./database');
 
 // Load .env file if exists (zero-dependency approach)
@@ -113,6 +114,31 @@ function authenticateAdmin(req) {
   // Simple token: base64(username:password)
   const validToken = Buffer.from(`${UI_USERNAME}:${UI_PASSWORD}`).toString('base64');
   return token === validToken;
+}
+
+// Simple password hashing function
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(password).digest('hex');
+}
+
+// Authenticate user request - returns user object if valid
+function authenticateUser(req) {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader) return null;
+
+  const token = authHeader.replace('Bearer ', '');
+  // Token format: base64(username:userId)
+  try {
+    const decoded = Buffer.from(token, 'base64').toString('utf8');
+    const [username, userId] = decoded.split(':');
+    const user = db.getUser(userId);
+    if (user && user.username === username && user.enabled) {
+      return user;
+    }
+  } catch (e) {
+    return null;
+  }
+  return null;
 }
 
 // Lightweight HTTP request helper
@@ -435,6 +461,141 @@ const server = http.createServer(async (req, res) => {
           }
         }
       }
+    }
+
+    // Admin API - Users Management
+    if (req.url.startsWith('/api/admin/users')) {
+      if (!authenticateAdmin(req)) {
+        return sendJSON(res, 401, { error: 'Unauthorized' });
+      }
+
+      // GET all users
+      if (req.method === 'GET' && req.url === '/api/admin/users') {
+        return sendJSON(res, 200, { users: db.getUsers() });
+      }
+
+      // POST new user
+      if (req.method === 'POST' && req.url === '/api/admin/users') {
+        const body = await parseBody(req);
+
+        // Check if username already exists
+        if (db.findUserByUsername(body.username)) {
+          return sendJSON(res, 400, { error: 'Username already exists' });
+        }
+
+        // Hash the password
+        const hashedPassword = hashPassword(body.password);
+
+        const user = db.addUser({
+          username: body.username,
+          password: hashedPassword,
+          apiKeyId: body.apiKeyId,
+          enabled: body.enabled !== false
+        });
+
+        return sendJSON(res, 201, { ...user, password: undefined });
+      }
+
+      // PUT update user
+      if (req.method === 'PUT') {
+        const match = req.url.match(/^\/api\/admin\/users\/([^\/]+)$/);
+        if (match) {
+          const id = decodeURIComponent(match[1]);
+          const body = await parseBody(req);
+
+          // If password is being updated, hash it
+          if (body.password) {
+            body.password = hashPassword(body.password);
+          }
+
+          const user = db.updateUser(id, body);
+          return sendJSON(res, 200, { ...user, password: undefined });
+        }
+      }
+
+      // DELETE user
+      if (req.method === 'DELETE') {
+        const match = req.url.match(/^\/api\/admin\/users\/([^\/]+)$/);
+        if (match) {
+          const id = decodeURIComponent(match[1]);
+          const result = db.deleteUser(id);
+          if (result) {
+            return sendJSON(res, 200, { success: true });
+          } else {
+            return sendJSON(res, 400, { error: 'User not found' });
+          }
+        }
+      }
+    }
+
+    // User Login
+    if (req.method === 'POST' && req.url === '/api/user/login') {
+      const body = await parseBody(req);
+      const user = db.findUserByUsername(body.username);
+
+      if (!user || !user.enabled) {
+        return sendJSON(res, 401, { error: 'Invalid credentials' });
+      }
+
+      const hashedPassword = hashPassword(body.password);
+      if (user.password !== hashedPassword) {
+        return sendJSON(res, 401, { error: 'Invalid credentials' });
+      }
+
+      // Create token
+      const token = Buffer.from(`${user.username}:${user.id}`).toString('base64');
+
+      // Get user's API key
+      const apiKey = db.getApiKey(user.apiKeyId);
+
+      return sendJSON(res, 200, {
+        token,
+        user: {
+          id: user.id,
+          username: user.username,
+          apiKeyId: user.apiKeyId
+        },
+        apiKey: apiKey ? {
+          id: apiKey.id,
+          key: apiKey.key,
+          name: apiKey.name,
+          allowedModels: apiKey.allowedModels
+        } : null
+      });
+    }
+
+    // User API - Get user info and API key
+    if (req.method === 'GET' && req.url === '/api/user/me') {
+      const user = authenticateUser(req);
+      if (!user) {
+        return sendJSON(res, 401, { error: 'Unauthorized' });
+      }
+
+      const apiKey = db.getApiKey(user.apiKeyId);
+
+      return sendJSON(res, 200, {
+        user: {
+          id: user.id,
+          username: user.username,
+          apiKeyId: user.apiKeyId
+        },
+        apiKey: apiKey ? {
+          id: apiKey.id,
+          key: apiKey.key,
+          name: apiKey.name,
+          allowedModels: apiKey.allowedModels
+        } : null
+      });
+    }
+
+    // Serve user.html
+    if (req.method === 'GET' && req.url === '/user.html') {
+      return sendFile(res, path.join(__dirname, 'public', 'user.html'), 'text/html');
+    }
+
+    // Serve user.js
+    if (req.method === 'GET' && req.url === '/user.js') {
+      return sendFile(res, path.join(__dirname, 'public', 'user.js'), 'application/javascript');
     }
 
     // GET /v1/models

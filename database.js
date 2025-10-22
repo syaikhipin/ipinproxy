@@ -7,7 +7,7 @@ class Database {
     // Use /tmp on read-only filesystems (like Render free tier)
     this.originalPath = filepath;
     this.filepath = this.getWritablePath(filepath);
-    this.data = { providers: [], models: [], apiKeys: [] };
+    this.data = { providers: [], models: [], apiKeys: [], users: [] };
     this.load();
   }
 
@@ -51,13 +51,14 @@ class Database {
         this.data = {
           apiKeys: [],
           providers: [],
-          models: []
+          models: [],
+          users: []
         };
         this.save();
       }
     } catch (error) {
       console.error('Error loading database:', error);
-      this.data = { providers: [], models: [], apiKeys: [] };
+      this.data = { providers: [], models: [], apiKeys: [], users: [] };
     }
   }
 
@@ -224,6 +225,67 @@ class Database {
 
   getEnabledApiKeys() {
     return this.data.apiKeys?.filter(k => k.enabled) || [];
+  }
+
+  // User operations
+  getUsers() {
+    return this.data.users || [];
+  }
+
+  getUser(id) {
+    return this.data.users?.find(u => u.id === id);
+  }
+
+  findUserByUsername(username) {
+    return this.data.users?.find(u => u.username === username);
+  }
+
+  findUserByApiKeyId(apiKeyId) {
+    return this.data.users?.find(u => u.apiKeyId === apiKeyId);
+  }
+
+  addUser(user) {
+    if (!this.data.users) this.data.users = [];
+
+    const newUser = {
+      id: user.id || `user_${Date.now()}`,
+      username: user.username,
+      password: user.password, // Store hashed password
+      apiKeyId: user.apiKeyId, // Link to API key
+      enabled: user.enabled !== false,
+      createdAt: Date.now()
+    };
+    this.data.users.push(newUser);
+    this.save();
+    return newUser;
+  }
+
+  updateUser(id, updates) {
+    if (!this.data.users) return null;
+
+    const index = this.data.users.findIndex(u => u.id === id);
+    if (index !== -1) {
+      this.data.users[index] = { ...this.data.users[index], ...updates };
+      this.save();
+      return this.data.users[index];
+    }
+    return null;
+  }
+
+  deleteUser(id) {
+    if (!this.data.users) return false;
+
+    const index = this.data.users.findIndex(u => u.id === id);
+    if (index !== -1) {
+      this.data.users.splice(index, 1);
+      this.save();
+      return true;
+    }
+    return false;
+  }
+
+  getEnabledUsers() {
+    return this.data.users?.filter(u => u.enabled) || [];
   }
 }
 
