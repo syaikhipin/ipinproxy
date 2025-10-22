@@ -83,8 +83,9 @@ async function loadModels() {
         `<span class="model-tag">${model.id}</span>`
       ).join('');
 
+      // Hide provider name in model selector
       modelSelect.innerHTML = data.data.map(model =>
-        `<option value="${model.id}">${model.id} (${model.owned_by})</option>`
+        `<option value="${model.id}">${model.id}</option>`
       ).join('');
     } else {
       modelsList.innerHTML = '<div class="no-models">No models available</div>';
