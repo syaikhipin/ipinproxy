@@ -358,6 +358,7 @@
                 <select id="chat-model-select" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
                   <option value="">Loading models...</option>
                 </select>
+                <p style="font-size: 11px; color: #999; margin-top: 4px;">📷 = Supports image uploads (Claude, GPT-4 Vision, Gemini, Qwen-VL)</p>
               </div>
               <div style="display: flex; gap: 10px;">
                 <button class="btn" style="flex: 1;" onclick="testChatConnection()">Test Connection</button>
@@ -374,9 +375,24 @@
             </div>
           </div>
 
-          <div style="display: flex; gap: 10px;">
-            <textarea id="chat-input" placeholder="Type your message here... (Press Ctrl+Enter to send)" style="flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; min-height: 80px;"></textarea>
-            <button class="btn" id="chat-send-btn" onclick="sendChatMessage()" style="padding: 12px 24px;">Send</button>
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div id="image-preview-container" style="display: none; padding: 10px; background: white; border-radius: 8px; border: 1px solid #ddd;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <span style="font-size: 12px; font-weight: 600; color: #666;">ATTACHED IMAGE</span>
+                <button onclick="removeImage()" style="background: #ef4444; color: white; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;">Remove</button>
+              </div>
+              <img id="image-preview" style="max-width: 200px; max-height: 200px; border-radius: 4px; border: 1px solid #e0e0e0;">
+            </div>
+            <div style="display: flex; gap: 10px;">
+              <textarea id="chat-input" placeholder="Type your message here... (Press Ctrl+Enter to send)" style="flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; min-height: 80px;"></textarea>
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <label for="image-upload" class="btn" style="padding: 12px 20px; text-align: center; cursor: pointer; margin: 0;">
+                  📎 Image
+                  <input type="file" id="image-upload" accept="image/*" style="display: none;" onchange="handleImageUpload(event)">
+                </label>
+                <button class="btn" id="chat-send-btn" onclick="sendChatMessage()" style="padding: 12px 24px;">Send</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

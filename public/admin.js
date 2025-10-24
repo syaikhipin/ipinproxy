@@ -428,6 +428,7 @@ document.getElementById('apikey-form').addEventListener('submit', async (e) => {
 // Chat functionality
 let chatMessages = [];
 let chatApiKey = null;
+let currentImage = null; // Store current image as base64
 
 async function loadChatModels() {
   // Get master API key from server (from .env)
@@ -456,9 +457,11 @@ async function loadChatModels() {
     const select = document.getElementById('chat-model-select');
 
     if (data.data && data.data.length > 0) {
-      select.innerHTML = data.data.map(m =>
-        `<option value="${m.id}">${m.id}</option>`
-      ).join('');
+      select.innerHTML = data.data.map(m => {
+        const hasVision = supportsVision(m.id);
+        const visionIcon = hasVision ? '📷 ' : '';
+        return `<option value="${m.id}">${visionIcon}${m.id}</option>`;
+      }).join('');
     } else {
       select.innerHTML = '<option value="">No models available</option>';
     }
@@ -533,15 +536,50 @@ async function sendChatMessage() {
     return;
   }
 
-  if (!message) {
-    showChatStatus('error', 'Please enter a message');
+  if (!message && !currentImage) {
+    showChatStatus('error', 'Please enter a message or attach an image');
     return;
   }
 
+  // Check if model supports vision when image is attached
+  if (currentImage && !supportsVision(model)) {
+    showChatStatus('error', 'This model does not support image inputs. Please select a vision-capable model (Claude, GPT-4 Vision, Gemini, or Qwen-VL)');
+    return;
+  }
+
+  // Prepare user message content
+  let userContent;
+  let hasImage = false;
+
+  if (currentImage) {
+    // Format message with image for vision models
+    userContent = [
+      {
+        type: 'text',
+        text: message || 'What is in this image?'
+      },
+      {
+        type: 'image_url',
+        image_url: {
+          url: currentImage
+        }
+      }
+    ];
+    hasImage = true;
+  } else {
+    // Text-only message
+    userContent = message;
+  }
+
   // Add user message
-  chatMessages.push({ role: 'user', content: message });
+  chatMessages.push({ role: 'user', content: userContent, hasImage: hasImage, imageData: hasImage ? currentImage : null });
   renderChatMessages();
   input.value = '';
+
+  // Clear image after sending
+  if (currentImage) {
+    removeImage();
+  }
 
   // Disable send button
   const sendBtn = document.getElementById('chat-send-btn');
@@ -557,7 +595,10 @@ async function sendChatMessage() {
       },
       body: JSON.stringify({
         model: model,
-        messages: chatMessages,
+        messages: chatMessages.map(msg => ({
+          role: msg.role,
+          content: msg.content
+        })),
         max_tokens: 2000,
         temperature: 0.7
       })
@@ -618,11 +659,32 @@ function renderChatMessages() {
     const isUser = msg.role === 'user';
     const modelBadge = msg.model ? `<span style="display: inline-block; background: #667eea; color: white; padding: 2px 8px; border-radius: 10px; font-size: 10px; margin-left: 8px;">${msg.model}</span>` : '';
 
+    // Handle content - could be string or array (for vision messages)
+    let contentHtml = '';
+    if (msg.hasImage && msg.imageData) {
+      // Display image with text
+      const textContent = Array.isArray(msg.content)
+        ? msg.content.find(c => c.type === 'text')?.text || ''
+        : msg.content;
+      contentHtml = `
+        <div style="margin-bottom: 8px;">
+          <img src="${msg.imageData}" style="max-width: 100%; max-height: 300px; border-radius: 8px; border: 1px solid ${isUser ? 'rgba(255,255,255,0.3)' : '#e0e0e0'};">
+        </div>
+        ${textContent ? `<div>${escapeHtml(textContent)}</div>` : ''}
+      `;
+    } else {
+      // Text-only message
+      const textContent = typeof msg.content === 'string'
+        ? msg.content
+        : (Array.isArray(msg.content) ? msg.content.find(c => c.type === 'text')?.text || '' : '');
+      contentHtml = escapeHtml(textContent);
+    }
+
     return `
       <div style="margin-bottom: 16px; display: flex; flex-direction: column; align-items: ${isUser ? 'flex-end' : 'flex-start'};">
         <div style="font-size: 11px; color: #999; margin-bottom: 4px; font-weight: 600;">${isUser ? 'YOU' : 'ASSISTANT'}${modelBadge}</div>
         <div style="max-width: 70%; padding: 12px 16px; border-radius: 12px; background: ${isUser ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'white'}; color: ${isUser ? 'white' : '#333'}; ${!isUser ? 'border: 1px solid #e0e0e0;' : ''} white-space: pre-wrap; word-wrap: break-word;">
-          ${escapeHtml(msg.content)}
+          ${contentHtml}
         </div>
       </div>
     `;
@@ -645,6 +707,57 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// Image upload functionality
+function handleImageUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  // Validate file type
+  if (!file.type.startsWith('image/')) {
+    showChatStatus('error', 'Please select an image file');
+    return;
+  }
+
+  // Validate file size (max 10MB)
+  if (file.size > 10 * 1024 * 1024) {
+    showChatStatus('error', 'Image size must be less than 10MB');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    currentImage = e.target.result; // Store base64 data
+    document.getElementById('image-preview').src = currentImage;
+    document.getElementById('image-preview-container').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeImage() {
+  currentImage = null;
+  document.getElementById('image-preview-container').style.display = 'none';
+  document.getElementById('image-upload').value = '';
+}
+
+// Check if model supports vision
+function supportsVision(modelId) {
+  const visionModels = [
+    'claude-sonnet',
+    'claude-opus',
+    'claude-haiku',
+    'gpt-4-vision',
+    'gpt-4-turbo',
+    'gpt-4o',
+    'gemini-2.5-pro',
+    'gemini-1.5-pro',
+    'gemini-1.5-flash',
+    'qwen-vl',
+    'qwen2-vl'
+  ];
+
+  return visionModels.some(vm => modelId.toLowerCase().includes(vm));
 }
 
 // Keyboard shortcut for chat
