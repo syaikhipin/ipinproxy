@@ -267,6 +267,236 @@ function transformHuggingFaceResponse(hfResponse, model) {
   };
 }
 
+function normalizeUsage(usage) {
+  if (!usage || typeof usage !== 'object') {
+    return { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+  }
+
+  const promptTokens = usage.prompt_tokens ?? usage.promptTokens ?? usage.input_tokens ?? usage.inputTokens ?? usage.prompt ?? 0;
+  const completionTokens = usage.completion_tokens ?? usage.completionTokens ?? usage.output_tokens ?? usage.outputTokens ?? usage.completion ?? 0;
+  const totalTokens = usage.total_tokens ?? usage.totalTokens ?? ((promptTokens || 0) + (completionTokens || 0));
+
+  return {
+    prompt_tokens: promptTokens || 0,
+    completion_tokens: completionTokens || 0,
+    total_tokens: totalTokens || (promptTokens || 0) + (completionTokens || 0)
+  };
+}
+
+function extractText(value, visited = new Set()) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+
+  if (typeof value === 'object') {
+    if (visited.has(value)) return '';
+    visited.add(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(item => extractText(item, visited)).filter(Boolean).join('\n');
+  }
+
+  if (typeof value === 'object') {
+    const priorityKeys = [
+      'text',
+      'content',
+      'output_text',
+      'output',
+      'result',
+      'response',
+      'completion',
+      'answer',
+      'value',
+      'parts',
+      'data',
+      'message'
+    ];
+
+    const parts = [];
+
+    for (const key of priorityKeys) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) {
+        const text = extractText(value[key], visited);
+        if (text) parts.push(text);
+      }
+    }
+
+    for (const key of Object.keys(value)) {
+      if (priorityKeys.includes(key)) continue;
+      const text = extractText(value[key], visited);
+      if (text) parts.push(text);
+    }
+
+    return parts.filter(Boolean).join('\n');
+  }
+
+  return '';
+}
+
+function normalizeToOpenAIResponse(responseData, model) {
+  const now = Math.floor(Date.now() / 1000);
+
+  if (!responseData) {
+    return {
+      id: `chatcmpl-${Date.now()}`,
+      object: 'chat.completion',
+      created: now,
+      model,
+      choices: [{
+        index: 0,
+        message: { role: 'assistant', content: '' },
+        finish_reason: 'stop'
+      }],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }
+    };
+  }
+
+  const buildResponse = (choices, usage, base = {}) => ({
+    id: base.id || `chatcmpl-${Date.now()}`,
+    object: base.object === 'chat.completion' ? base.object : 'chat.completion',
+    created: typeof base.created === 'number' ? base.created : now,
+    model: base.model || model,
+    choices,
+    usage: normalizeUsage(usage || base.usage)
+  });
+
+  if (Array.isArray(responseData.choices)) {
+    const normalizedChoices = responseData.choices.map((choice, idx) => {
+      if (choice && typeof choice === 'object' && choice.message) {
+        const message = { ...choice.message };
+        if (message.content !== undefined && typeof message.content !== 'string') {
+          message.content = extractText(message.content);
+        }
+        if (message.content === undefined) {
+          message.content = extractText(choice);
+        }
+        if (!message.role) {
+          message.role = 'assistant';
+        }
+        if (!message.tool_calls && choice.tool_calls) {
+          message.tool_calls = choice.tool_calls;
+        }
+        const normalizedChoice = {
+          index: typeof choice.index === 'number' ? choice.index : idx,
+          message,
+          finish_reason: choice.finish_reason || choice.finishReason || 'stop'
+        };
+        if (choice.logprobs !== undefined) {
+          normalizedChoice.logprobs = choice.logprobs;
+        }
+        return normalizedChoice;
+      }
+
+      const content = extractText(choice);
+      return {
+        index: typeof choice?.index === 'number' ? choice.index : idx,
+        message: { role: 'assistant', content },
+        finish_reason: choice?.finish_reason || choice?.finishReason || 'stop'
+      };
+    });
+
+    return buildResponse(normalizedChoices, responseData.usage, responseData);
+  }
+
+  if (responseData.data && typeof responseData.data === 'object') {
+    const nested = normalizeToOpenAIResponse(responseData.data, model);
+    if (!nested.id && responseData.id) nested.id = responseData.id;
+    if (responseData.usage) nested.usage = normalizeUsage(responseData.usage);
+    return nested;
+  }
+
+  if (Array.isArray(responseData.candidates)) {
+    const normalizedChoices = responseData.candidates.map((candidate, idx) => {
+      const content = extractText(candidate.content ?? candidate);
+      return {
+        index: typeof candidate.index === 'number' ? candidate.index : idx,
+        message: { role: 'assistant', content },
+        finish_reason: candidate.finishReason || candidate.finish_reason || 'stop'
+      };
+    }).filter(choice => choice.message.content !== '');
+
+    if (normalizedChoices.length > 0) {
+      return buildResponse(normalizedChoices, responseData.usage, responseData);
+    }
+  }
+
+  const candidateChoices = [];
+
+  if (Array.isArray(responseData.messages)) {
+    const reversed = [...responseData.messages].reverse();
+    const assistantMessage = reversed.find(msg => {
+      const role = (msg.role || msg.type || '').toLowerCase();
+      return role === 'assistant' || role === 'model' || role === 'ai' || role === 'bot';
+    });
+
+    if (assistantMessage) {
+      const content = extractText(assistantMessage.content ?? assistantMessage);
+      if (content) {
+        candidateChoices.push({
+          role: assistantMessage.role || 'assistant',
+          content,
+          finish_reason: assistantMessage.finish_reason || assistantMessage.finishReason || 'stop'
+        });
+      }
+    }
+  }
+
+  const fields = ['output_text', 'output', 'result', 'text', 'message', 'content', 'response', 'completion', 'answer'];
+  for (const field of fields) {
+    if (responseData[field] === undefined) continue;
+    const value = responseData[field];
+
+    if (field === 'message' && value && typeof value === 'object') {
+      const role = value.role || 'assistant';
+      const content = extractText(value.content ?? value.text ?? value);
+      if (content) {
+        candidateChoices.push({
+          role,
+          content,
+          finish_reason: value.finish_reason || value.finishReason || 'stop'
+        });
+      }
+      continue;
+    }
+
+    const content = extractText(value);
+    if (content) {
+      candidateChoices.push({
+        role: 'assistant',
+        content,
+        finish_reason: 'stop'
+      });
+    }
+  }
+
+  if (candidateChoices.length === 0) {
+    if (typeof responseData === 'string') {
+      candidateChoices.push({ role: 'assistant', content: responseData, finish_reason: 'stop' });
+    } else {
+      const fallback = extractText(responseData);
+      if (fallback) {
+        candidateChoices.push({ role: 'assistant', content: fallback, finish_reason: 'stop' });
+      }
+    }
+  }
+
+  if (candidateChoices.length === 0) {
+    candidateChoices.push({ role: 'assistant', content: '', finish_reason: 'stop' });
+  }
+
+  const normalizedChoices = candidateChoices.map((choice, idx) => ({
+    index: idx,
+    message: {
+      role: choice.role || 'assistant',
+      content: choice.content
+    },
+    finish_reason: choice.finish_reason || 'stop'
+  }));
+
+  return buildResponse(normalizedChoices, responseData.usage, responseData);
+}
+
 // Create server
 const server = http.createServer(async (req, res) => {
   // CORS headers
@@ -754,7 +984,8 @@ const server = http.createServer(async (req, res) => {
           return sendJSON(res, response.status, response.data);
         }
 
-        return sendJSON(res, 200, response.data);
+        const normalizedResponse = normalizeToOpenAIResponse(response.data, model);
+        return sendJSON(res, 200, normalizedResponse);
       }
     }
 

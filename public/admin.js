@@ -754,7 +754,8 @@ function supportsVision(modelId) {
     'gemini-1.5-pro',
     'gemini-1.5-flash',
     'qwen-vl',
-    'qwen2-vl'
+    'qwen2-vl',
+    'qwen3-vl-plus'
   ];
 
   return visionModels.some(vm => modelId.toLowerCase().includes(vm));
