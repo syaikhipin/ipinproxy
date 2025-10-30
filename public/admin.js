@@ -429,6 +429,164 @@ document.getElementById('apikey-form').addEventListener('submit', async (e) => {
   }
 });
 
+// ============================================
+// USERS MANAGEMENT
+// ============================================
+
+let users = [];
+
+async function loadUsers() {
+  try {
+    const data = await apiCall('/api/admin/users');
+    users = data.users;
+    renderUsers();
+    updateUserApiKeySelect();
+  } catch (error) {
+    console.error('Error loading users:', error);
+  }
+}
+
+function renderUsers() {
+  const tbody = document.querySelector('#users-table tbody');
+  tbody.innerHTML = users.map(u => {
+    const date = new Date(u.createdAt).toLocaleDateString();
+    const apiKey = apiKeys.find(k => k.id === u.apiKeyId);
+    const apiKeyName = apiKey ? apiKey.name : u.apiKeyId;
+
+    return `
+      <tr>
+        <td><strong>${u.username}</strong></td>
+        <td>${apiKeyName}</td>
+        <td>${date}</td>
+        <td><span class="badge badge-${u.enabled ? 'success' : 'danger'}">${u.enabled ? 'Enabled' : 'Disabled'}</span></td>
+        <td>
+          <button class="btn" onclick="editUser('${u.id}')">Edit</button>
+          <button class="btn btn-danger" onclick="deleteUser('${u.id}')">Delete</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function updateUserApiKeySelect() {
+  const select = document.getElementById('user-apikey');
+  if (select) {
+    select.innerHTML = '<option value="">Select an API Key...</option>' +
+      apiKeys.map(k => `<option value="${k.id}">${k.name} (${k.key.substring(0, 10)}...)</option>`).join('');
+  }
+}
+
+function showAddUserModal() {
+  document.getElementById('user-modal-title').textContent = 'Add User';
+  document.getElementById('user-form').reset();
+  document.getElementById('user-id').value = '';
+
+  // Reset password visibility toggle to hidden state
+  const passwordInput = document.getElementById('user-password');
+  passwordInput.type = 'password';
+  passwordInput.required = true;
+  document.getElementById('user-password-toggle-text').textContent = 'Show';
+
+  updateUserApiKeySelect();
+  showModal('user-modal');
+}
+
+function editUser(id) {
+  const user = users.find(u => u.id === id);
+  if (!user) return;
+
+  document.getElementById('user-modal-title').textContent = 'Edit User';
+  document.getElementById('user-id').value = user.id;
+  document.getElementById('user-username').value = user.username;
+  document.getElementById('user-password').value = '';
+  document.getElementById('user-password').placeholder = 'Leave empty to keep current password';
+  document.getElementById('user-password').required = false;
+  document.getElementById('user-apikey').value = user.apiKeyId;
+  document.getElementById('user-enabled').checked = user.enabled;
+
+  // Reset password visibility toggle
+  const passwordInput = document.getElementById('user-password');
+  passwordInput.type = 'password';
+  document.getElementById('user-password-toggle-text').textContent = 'Show';
+
+  updateUserApiKeySelect();
+  showModal('user-modal');
+}
+
+async function deleteUser(id) {
+  if (!confirm('Are you sure you want to delete this user? They will no longer be able to log in.')) {
+    return;
+  }
+
+  try {
+    await apiCall(`/api/admin/users/${id}`, { method: 'DELETE' });
+    await loadUsers();
+  } catch (error) {
+    alert('Error deleting user: ' + error.message);
+  }
+}
+
+function toggleUserPasswordVisibility() {
+  const passwordInput = document.getElementById('user-password');
+  const toggleText = document.getElementById('user-password-toggle-text');
+
+  if (passwordInput.type === 'password') {
+    passwordInput.type = 'text';
+    toggleText.textContent = 'Hide';
+  } else {
+    passwordInput.type = 'password';
+    toggleText.textContent = 'Show';
+  }
+}
+
+// User form submission
+document.getElementById('user-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const id = document.getElementById('user-id').value;
+  const username = document.getElementById('user-username').value;
+  const password = document.getElementById('user-password').value;
+  const apiKeyId = document.getElementById('user-apikey').value;
+  const enabled = document.getElementById('user-enabled').checked;
+
+  // Validate password for new users
+  if (!id && password.length < 6) {
+    alert('Password must be at least 6 characters long');
+    return;
+  }
+
+  const data = {
+    username: username,
+    apiKeyId: apiKeyId,
+    enabled: enabled
+  };
+
+  // Only include password if it was entered (for edits)
+  if (password) {
+    data.password = password;
+  }
+
+  try {
+    if (id) {
+      await apiCall(`/api/admin/users/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data)
+      });
+    } else {
+      await apiCall('/api/admin/users', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+    }
+
+    closeModal('user-modal');
+    await loadUsers();
+    alert(id ? 'User updated successfully!' : 'User created successfully! They can now log in with their username and password.');
+  } catch (error) {
+    alert('Error saving user: ' + error.message);
+  }
+});
+
 // Chat functionality
 let chatMessages = [];
 let chatApiKey = null;
@@ -782,6 +940,7 @@ checkAuth();
 loadProviders();
 loadModels();
 loadApiKeys();
+loadUsers();
 
 // Load chat models when switching to chat tab or when API keys are loaded
 const originalSwitchTab = switchTab;
