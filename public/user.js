@@ -4,6 +4,7 @@ let userData = null;
 let apiKeyData = null;
 let messages = [];
 let allowedModels = [];
+let availableModels = []; // Store actual available models from API
 
 // Check authentication on load
 window.addEventListener('DOMContentLoaded', async () => {
@@ -73,6 +74,9 @@ async function loadModels() {
     }
 
     const data = await response.json();
+
+    // Store available models for documentation generation
+    availableModels = data.data || [];
 
     // Display models
     const modelsList = document.getElementById('models-list');
@@ -321,6 +325,9 @@ function generateDocumentation() {
   const baseUrl = window.location.origin;
   const apiKey = apiKeyData.key;
 
+  // Use first available model from the API, or a placeholder if none exist
+  const exampleModel = availableModels.length > 0 ? availableModels[0].id : 'your-model-id';
+
   // Base URL
   document.getElementById('base-url-display').textContent = `${baseUrl}/v1`;
 
@@ -329,7 +336,7 @@ function generateDocumentation() {
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer ${apiKey}" \\
   -d '{
-    "model": "${allowedModels.length > 0 ? allowedModels[0] : 'your-model-id'}",
+    "model": "${exampleModel}",
     "messages": [
       {"role": "user", "content": "Hello!"}
     ]
@@ -346,7 +353,7 @@ headers = {
     "Content-Type": "application/json"
 }
 data = {
-    "model": "${allowedModels.length > 0 ? allowedModels[0] : 'your-model-id'}",
+    "model": "${exampleModel}",
     "messages": [
         {"role": "user", "content": "Hello!"}
     ]
@@ -362,7 +369,7 @@ print(response.json())
 #     base_url="${baseUrl}/v1"
 # )
 # response = client.chat.completions.create(
-#     model="${allowedModels.length > 0 ? allowedModels[0] : 'your-model-id'}",
+#     model="${exampleModel}",
 #     messages=[{"role": "user", "content": "Hello!"}]
 # )`;
 
@@ -376,7 +383,7 @@ print(response.json())
     'Content-Type': 'application/json'
   },
   body: JSON.stringify({
-    model: '${allowedModels.length > 0 ? allowedModels[0] : 'your-model-id'}',
+    model: '${exampleModel}',
     messages: [
       { role: 'user', content: 'Hello!' }
     ]
