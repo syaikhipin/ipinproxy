@@ -210,6 +210,8 @@ function editModel(id) {
   document.getElementById('model-id').value = model.id;
   document.getElementById('model-provider').value = model.providerId;
   document.getElementById('model-enabled').checked = model.enabled;
+  document.getElementById('model-supports-image').checked = model.supportsImageUpload || false;
+  document.getElementById('model-supports-video').checked = model.supportsVideoUpload || false;
   showModal('model-modal');
 }
 
@@ -278,7 +280,9 @@ document.getElementById('model-form').addEventListener('submit', async (e) => {
     id: document.getElementById('model-id').value,
     name: document.getElementById('model-name').value,
     providerId: document.getElementById('model-provider').value,
-    enabled: document.getElementById('model-enabled').checked
+    enabled: document.getElementById('model-enabled').checked,
+    supportsImageUpload: document.getElementById('model-supports-image').checked,
+    supportsVideoUpload: document.getElementById('model-supports-video').checked
   };
 
   try {

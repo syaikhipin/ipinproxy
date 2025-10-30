@@ -43,6 +43,9 @@ class Database {
         const content = fs.readFileSync(this.filepath, 'utf8');
         this.data = JSON.parse(content);
         console.log('✅ Database loaded successfully');
+
+        // Migrate existing models to add upload flags if missing
+        this.migrateModels();
       } else {
         // Initialize empty database - configure via Admin UI
         console.log('⚠️  Database file not found. Creating empty database.');
@@ -59,6 +62,29 @@ class Database {
     } catch (error) {
       console.error('Error loading database:', error);
       this.data = { providers: [], models: [], apiKeys: [], users: [] };
+    }
+  }
+
+  // Migrate existing models to add upload capability flags
+  migrateModels() {
+    let migrated = false;
+    if (this.data.models) {
+      this.data.models = this.data.models.map(model => {
+        if (model.supportsImageUpload === undefined || model.supportsVideoUpload === undefined) {
+          migrated = true;
+          return {
+            ...model,
+            supportsImageUpload: model.supportsImageUpload || false,
+            supportsVideoUpload: model.supportsVideoUpload || false
+          };
+        }
+        return model;
+      });
+
+      if (migrated) {
+        this.save();
+        console.log('✅ Migrated models to include upload capability flags');
+      }
     }
   }
 
@@ -130,7 +156,9 @@ class Database {
       id: model.id,
       name: model.name,
       providerId: model.providerId,
-      enabled: model.enabled !== false
+      enabled: model.enabled !== false,
+      supportsImageUpload: model.supportsImageUpload || false,
+      supportsVideoUpload: model.supportsVideoUpload || false
     };
     this.data.models.push(newModel);
     this.save();

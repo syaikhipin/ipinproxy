@@ -72,7 +72,11 @@ function loadModelsFromDB() {
   const models = db.getEnabledModels();
   MODEL_ROUTES = {};
   models.forEach(m => {
-    MODEL_ROUTES[m.id] = m.providerId;
+    MODEL_ROUTES[m.id] = {
+      providerId: m.providerId,
+      supportsImageUpload: m.supportsImageUpload || false,
+      supportsVideoUpload: m.supportsVideoUpload || false
+    };
   });
 }
 
@@ -368,6 +372,19 @@ function transformChutesTranscriptionResponse(chutesResponse) {
 function isImageContent(content) {
   if (!Array.isArray(content)) return false;
   return content.some(item => item.type === 'image_url' && item.image_url);
+}
+
+function isVideoContent(content) {
+  if (!Array.isArray(content)) return false;
+  return content.some(item => {
+    // Check for video_url type or data URLs with video MIME types
+    if (item.type === 'video_url' && item.video_url) return true;
+    if (item.type === 'image_url' && item.image_url) {
+      const url = typeof item.image_url === 'string' ? item.image_url : item.image_url.url;
+      return url && url.startsWith('data:video/');
+    }
+    return false;
+  });
 }
 
 function extractImageData(imageUrl) {
@@ -1093,7 +1110,7 @@ const server = http.createServer(async (req, res) => {
         id: modelId,
         object: 'model',
         created: Date.now(),
-        owned_by: MODEL_ROUTES[modelId]
+        owned_by: MODEL_ROUTES[modelId]?.providerId || 'unknown'
       }));
 
       return sendJSON(res, 200, {
@@ -1130,15 +1147,20 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req);
       const { model, messages, stream, ...params } = body;
 
-      // Detect if request contains images
+      // Detect if request contains images or videos
       const hasImages = messages && messages.some(msg => isImageContent(msg.content));
+      const hasVideos = messages && messages.some(msg => isVideoContent(msg.content));
+
       if (hasImages) {
         console.log(`[${new Date().toISOString()}] Image upload detected in request for model: ${model}`);
       }
+      if (hasVideos) {
+        console.log(`[${new Date().toISOString()}] Video upload detected in request for model: ${model}`);
+      }
 
       // Check if model is supported
-      const providerName = MODEL_ROUTES[model];
-      if (!providerName) {
+      const modelConfig = MODEL_ROUTES[model];
+      if (!modelConfig) {
         return sendJSON(res, 400, {
           error: {
             message: `Model '${model}' not supported. Available models: ${Object.keys(MODEL_ROUTES).join(', ')}`,
@@ -1147,6 +1169,30 @@ const server = http.createServer(async (req, res) => {
           }
         });
       }
+
+      // Validate image upload capability
+      if (hasImages && !modelConfig.supportsImageUpload) {
+        return sendJSON(res, 400, {
+          error: {
+            message: `Model '${model}' does not support image uploads. Please use a model with image upload capability enabled.`,
+            type: 'invalid_request_error',
+            code: 'image_upload_not_supported'
+          }
+        });
+      }
+
+      // Validate video upload capability
+      if (hasVideos && !modelConfig.supportsVideoUpload) {
+        return sendJSON(res, 400, {
+          error: {
+            message: `Model '${model}' does not support video uploads. Please use a model with video upload capability enabled.`,
+            type: 'invalid_request_error',
+            code: 'video_upload_not_supported'
+          }
+        });
+      }
+
+      const providerName = modelConfig.providerId;
 
       // Check if API key has permission to use this model
       const allowedModels = apiKey.allowedModels || [];
@@ -1248,8 +1294,8 @@ const server = http.createServer(async (req, res) => {
       }
 
       // Check if model is supported
-      const providerName = MODEL_ROUTES[model];
-      if (!providerName) {
+      const modelConfig = MODEL_ROUTES[model];
+      if (!modelConfig) {
         return sendJSON(res, 400, {
           error: {
             message: `Model '${model}' not supported. Available models: ${Object.keys(MODEL_ROUTES).join(', ')}`,
@@ -1258,6 +1304,8 @@ const server = http.createServer(async (req, res) => {
           }
         });
       }
+
+      const providerName = modelConfig.providerId;
 
       // Check if API key has permission to use this model
       const allowedModels = apiKey.allowedModels || [];
@@ -1368,8 +1416,8 @@ const server = http.createServer(async (req, res) => {
       }
 
       // Check if model is supported
-      const providerName = MODEL_ROUTES[model];
-      if (!providerName) {
+      const modelConfig = MODEL_ROUTES[model];
+      if (!modelConfig) {
         return sendJSON(res, 400, {
           error: {
             message: `Model '${model}' not supported. Available models: ${Object.keys(MODEL_ROUTES).join(', ')}`,
@@ -1378,6 +1426,8 @@ const server = http.createServer(async (req, res) => {
           }
         });
       }
+
+      const providerName = modelConfig.providerId;
 
       // Check if API key has permission to use this model
       const allowedModels = apiKey.allowedModels || [];
@@ -1541,8 +1591,8 @@ const server = http.createServer(async (req, res) => {
       }
 
       // Check if model is supported
-      const providerName = MODEL_ROUTES[model];
-      if (!providerName) {
+      const modelConfig = MODEL_ROUTES[model];
+      if (!modelConfig) {
         return sendJSON(res, 400, {
           error: {
             message: `Model '${model}' not supported. Available models: ${Object.keys(MODEL_ROUTES).join(', ')}`,
@@ -1551,6 +1601,8 @@ const server = http.createServer(async (req, res) => {
           }
         });
       }
+
+      const providerName = modelConfig.providerId;
 
       // Check if API key has permission to use this model
       const allowedModels = apiKey.allowedModels || [];
