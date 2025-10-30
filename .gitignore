@@ -3,7 +3,7 @@
 
 # Database (contains API keys and user data)
 *.db
-
+*.backup
 # Node modules (if ever added)
 node_modules/
 

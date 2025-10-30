@@ -158,6 +158,10 @@ async function loadModels() {
     const data = await apiCall('/api/admin/models');
     models = data.models;
     renderModels();
+    // Update model selectors for new tabs
+    updateAdminEmbeddingModelSelect();
+    updateAdminTranscriptionModelSelect();
+    updateAdminOCRModelSelect();
   } catch (error) {
     console.error('Error loading models:', error);
   }
@@ -926,4 +930,383 @@ function copyCode(elementId) {
     console.error('Failed to copy code:', err);
     alert('Failed to copy code to clipboard');
   });
+}
+
+// ============================================
+// EMBEDDINGS FUNCTIONS (ADMIN)
+// ============================================
+
+function updateAdminEmbeddingModelSelect() {
+  const select = document.getElementById('admin-embedding-model-select');
+  if (!select) return;
+
+  const embeddingModels = models.filter(m =>
+    m.enabled && (
+      m.id.toLowerCase().includes('embedding') ||
+      m.id.toLowerCase().includes('embed')
+    )
+  );
+
+  if (embeddingModels.length > 0) {
+    select.innerHTML = embeddingModels.map(m =>
+      `<option value="${m.id}">${m.name} (${m.id})</option>`
+    ).join('');
+  } else {
+    select.innerHTML = '<option value="">No embedding models available</option>';
+  }
+}
+
+async function adminGenerateEmbedding() {
+  const model = document.getElementById('admin-embedding-model-select').value;
+  const input = document.getElementById('admin-embedding-input').value.trim();
+  const btn = document.getElementById('admin-embedding-btn');
+  const status = document.getElementById('admin-embedding-status');
+  const result = document.getElementById('admin-embedding-result');
+
+  if (!model) {
+    status.style.display = 'block';
+    status.style.background = '#fee2e2';
+    status.style.color = '#991b1b';
+    status.style.border = '1px solid #fecaca';
+    status.textContent = 'Please select an embedding model';
+    return;
+  }
+
+  if (!input) {
+    status.style.display = 'block';
+    status.style.background = '#fee2e2';
+    status.style.color = '#991b1b';
+    status.style.border = '1px solid #fecaca';
+    status.textContent = 'Please enter text to generate embeddings';
+    return;
+  }
+
+  // Get first enabled API key for testing
+  const testApiKey = apiKeys.find(k => k.enabled);
+  if (!testApiKey) {
+    status.style.display = 'block';
+    status.style.background = '#fee2e2';
+    status.style.color = '#991b1b';
+    status.style.border = '1px solid #fecaca';
+    status.textContent = 'No enabled API keys available for testing';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+  status.style.display = 'none';
+  result.style.display = 'none';
+
+  try {
+    const response = await fetch('/v1/embeddings', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${testApiKey.key}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: model,
+        input: input
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || 'Failed to generate embedding');
+    }
+
+    const data = await response.json();
+
+    if (!data.data || !data.data[0] || !data.data[0].embedding) {
+      throw new Error('Invalid response format');
+    }
+
+    const embedding = data.data[0].embedding;
+
+    // Display results
+    document.getElementById('admin-embedding-result-model').textContent = data.model || model;
+    document.getElementById('admin-embedding-result-dims').textContent = embedding.length;
+    document.getElementById('admin-embedding-result-vector').textContent =
+      JSON.stringify(embedding.slice(0, 10), null, 2) + '\n... (' + (embedding.length - 10) + ' more values)';
+
+    result.style.display = 'block';
+    status.style.display = 'block';
+    status.style.background = '#d1fae5';
+    status.style.color = '#065f46';
+    status.style.border = '1px solid #6ee7b7';
+    status.textContent = `✓ Embedding generated successfully! (${embedding.length} dimensions)`;
+  } catch (error) {
+    status.style.display = 'block';
+    status.style.background = '#fee2e2';
+    status.style.color = '#991b1b';
+    status.style.border = '1px solid #fecaca';
+    status.textContent = `✗ Error: ${error.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate Embedding';
+  }
+}
+
+// ============================================
+// TRANSCRIPTION FUNCTIONS (ADMIN)
+// ============================================
+
+function updateAdminTranscriptionModelSelect() {
+  const select = document.getElementById('admin-transcription-model-select');
+  if (!select) return;
+
+  const transcriptionModels = models.filter(m =>
+    m.enabled && (
+      m.id.toLowerCase().includes('whisper') ||
+      m.id.toLowerCase().includes('transcri')
+    )
+  );
+
+  if (transcriptionModels.length > 0) {
+    select.innerHTML = transcriptionModels.map(m =>
+      `<option value="${m.id}">${m.name} (${m.id})</option>`
+    ).join('');
+  } else {
+    select.innerHTML = '<option value="">No transcription models available</option>';
+  }
+}
+
+async function adminTranscribeAudio() {
+  const model = document.getElementById('admin-transcription-model-select').value;
+  const fileInput = document.getElementById('admin-audio-file-input');
+  const language = document.getElementById('admin-transcription-language').value.trim();
+  const btn = document.getElementById('admin-transcription-btn');
+  const status = document.getElementById('admin-transcription-status');
+  const result = document.getElementById('admin-transcription-result');
+
+  if (!model) {
+    status.style.display = 'block';
+    status.style.background = '#fee2e2';
+    status.style.color = '#991b1b';
+    status.style.border = '1px solid #fecaca';
+    status.textContent = 'Please select a transcription model';
+    return;
+  }
+
+  if (!fileInput.files || !fileInput.files[0]) {
+    status.style.display = 'block';
+    status.style.background = '#fee2e2';
+    status.style.color = '#991b1b';
+    status.style.border = '1px solid #fecaca';
+    status.textContent = 'Please select an audio file';
+    return;
+  }
+
+  const file = fileInput.files[0];
+  const maxSize = 25 * 1024 * 1024; // 25MB
+
+  if (file.size > maxSize) {
+    status.style.display = 'block';
+    status.style.background = '#fee2e2';
+    status.style.color = '#991b1b';
+    status.style.border = '1px solid #fecaca';
+    status.textContent = `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds maximum allowed size (25MB)`;
+    return;
+  }
+
+  // Get first enabled API key for testing
+  const testApiKey = apiKeys.find(k => k.enabled);
+  if (!testApiKey) {
+    status.style.display = 'block';
+    status.style.background = '#fee2e2';
+    status.style.color = '#991b1b';
+    status.style.border = '1px solid #fecaca';
+    status.textContent = 'No enabled API keys available for testing';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Transcribing...';
+  status.style.display = 'none';
+  result.style.display = 'none';
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('model', model);
+    if (language) {
+      formData.append('language', language);
+    }
+
+    const response = await fetch('/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${testApiKey.key}`
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || 'Failed to transcribe audio');
+    }
+
+    const data = await response.json();
+
+    if (!data.text) {
+      throw new Error('Invalid response format');
+    }
+
+    // Display result
+    document.getElementById('admin-transcription-result-text').textContent = data.text;
+    result.style.display = 'block';
+    status.style.display = 'block';
+    status.style.background = '#d1fae5';
+    status.style.color = '#065f46';
+    status.style.border = '1px solid #6ee7b7';
+    status.textContent = `✓ Audio transcribed successfully!`;
+  } catch (error) {
+    status.style.display = 'block';
+    status.style.background = '#fee2e2';
+    status.style.color = '#991b1b';
+    status.style.border = '1px solid #fecaca';
+    status.textContent = `✗ Error: ${error.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Transcribe Audio';
+  }
+}
+
+// ============================================
+// OCR FUNCTIONS (ADMIN)
+// ============================================
+
+function updateAdminOCRModelSelect() {
+  const select = document.getElementById('admin-ocr-model-select');
+  if (!select) return;
+
+  const ocrModels = models.filter(m =>
+    m.enabled && (
+      m.id.toLowerCase().includes('ocr') ||
+      m.id.toLowerCase().includes('dots')
+    )
+  );
+
+  if (ocrModels.length > 0) {
+    select.innerHTML = ocrModels.map(m =>
+      `<option value="${m.id}">${m.name} (${m.id})</option>`
+    ).join('');
+  } else {
+    select.innerHTML = '<option value="">No OCR models available</option>';
+  }
+}
+
+// Preview image when selected (admin)
+document.addEventListener('DOMContentLoaded', () => {
+  const ocrFileInput = document.getElementById('admin-ocr-file-input');
+  if (ocrFileInput) {
+    ocrFileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          document.getElementById('admin-ocr-preview-img').src = e.target.result;
+          document.getElementById('admin-ocr-preview').style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+});
+
+async function adminPerformOCR() {
+  const model = document.getElementById('admin-ocr-model-select').value;
+  const fileInput = document.getElementById('admin-ocr-file-input');
+  const btn = document.getElementById('admin-ocr-btn');
+  const status = document.getElementById('admin-ocr-status');
+  const result = document.getElementById('admin-ocr-result');
+
+  if (!model) {
+    status.style.display = 'block';
+    status.style.background = '#fee2e2';
+    status.style.color = '#991b1b';
+    status.style.border = '1px solid #fecaca';
+    status.textContent = 'Please select an OCR model';
+    return;
+  }
+
+  if (!fileInput.files || !fileInput.files[0]) {
+    status.style.display = 'block';
+    status.style.background = '#fee2e2';
+    status.style.color = '#991b1b';
+    status.style.border = '1px solid #fecaca';
+    status.textContent = 'Please select an image file';
+    return;
+  }
+
+  const file = fileInput.files[0];
+  const maxSize = 10 * 1024 * 1024; // 10MB
+
+  if (file.size > maxSize) {
+    status.style.display = 'block';
+    status.style.background = '#fee2e2';
+    status.style.color = '#991b1b';
+    status.style.border = '1px solid #fecaca';
+    status.textContent = `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds maximum allowed size (10MB)`;
+    return;
+  }
+
+  // Get first enabled API key for testing
+  const testApiKey = apiKeys.find(k => k.enabled);
+  if (!testApiKey) {
+    status.style.display = 'block';
+    status.style.background = '#fee2e2';
+    status.style.color = '#991b1b';
+    status.style.border = '1px solid #fecaca';
+    status.textContent = 'No enabled API keys available for testing';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Extracting...';
+  status.style.display = 'none';
+  result.style.display = 'none';
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('model', model);
+
+    const response = await fetch('/v1/ocr', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${testApiKey.key}`
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || 'Failed to perform OCR');
+    }
+
+    const data = await response.json();
+
+    if (!data.text) {
+      throw new Error('Invalid response format');
+    }
+
+    // Display result
+    document.getElementById('admin-ocr-result-text').textContent = data.text;
+    result.style.display = 'block';
+    status.style.display = 'block';
+    status.style.background = '#d1fae5';
+    status.style.color = '#065f46';
+    status.style.border = '1px solid #6ee7b7';
+    status.textContent = `✓ Text extracted successfully!`;
+  } catch (error) {
+    status.style.display = 'block';
+    status.style.background = '#fee2e2';
+    status.style.color = '#991b1b';
+    status.style.border = '1px solid #fecaca';
+    status.textContent = `✗ Error: ${error.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Extract Text';
+  }
 }

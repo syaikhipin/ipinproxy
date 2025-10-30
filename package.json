@@ -14,7 +14,6 @@
     "llm",
     "openai",
     "claude",
-    "huggingface",
     "lightweight"
   ],
   "author": "syaikhipin",

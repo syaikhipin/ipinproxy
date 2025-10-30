@@ -417,9 +417,12 @@
 
     <div class="content">
       <div class="tabs">
-        <div class="tab active" onclick="switchTab('overview')">Overview</div>
-        <div class="tab" onclick="switchTab('chat')">Test Chat</div>
-        <div class="tab" onclick="switchTab('docs')">API Documentation</div>
+        <div class="tab active" onclick="switchTab('overview', event)">Overview</div>
+        <div class="tab" onclick="switchTab('chat', event)">Test Chat</div>
+        <div class="tab" onclick="switchTab('embeddings', event)">Embeddings</div>
+        <div class="tab" onclick="switchTab('transcription', event)">Transcription</div>
+        <div class="tab" onclick="switchTab('ocr', event)">OCR</div>
+        <div class="tab" onclick="switchTab('docs', event)">API Documentation</div>
       </div>
 
       <!-- Overview Tab -->
@@ -473,6 +476,116 @@
           <div class="input-section">
             <textarea id="message-input" placeholder="Type your message here..."></textarea>
             <button class="send-btn" onclick="sendMessage()" id="send-btn">Send</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Embeddings Tab -->
+      <div class="tab-content" id="embeddings-tab">
+        <h2 class="section-title">Test Embeddings API</h2>
+
+        <div class="chat-section">
+          <div class="model-selector">
+            <label>Select Embedding Model</label>
+            <select id="embedding-model-select">
+              <option value="">Loading models...</option>
+            </select>
+          </div>
+
+          <div class="input-section" style="flex-direction: column; gap: 15px;">
+            <textarea id="embedding-input" placeholder="Enter text to generate embeddings..." style="min-height: 120px; width: 100%;"></textarea>
+            <button class="send-btn" onclick="generateEmbedding()" id="embedding-btn" style="align-self: flex-start;">Generate Embedding</button>
+          </div>
+
+          <div class="status" id="embedding-status"></div>
+
+          <div id="embedding-result" style="display: none; margin-top: 20px;">
+            <h3 style="font-size: 16px; margin-bottom: 10px; color: #333;">Result:</h3>
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
+              <div style="margin-bottom: 10px;">
+                <strong>Model:</strong> <span id="embedding-result-model"></span>
+              </div>
+              <div style="margin-bottom: 10px;">
+                <strong>Dimensions:</strong> <span id="embedding-result-dims"></span>
+              </div>
+              <div>
+                <strong>Vector (first 10 values):</strong>
+                <pre id="embedding-result-vector" style="background: white; padding: 10px; border-radius: 4px; margin-top: 8px; font-size: 12px; overflow-x: auto;"></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Transcription Tab -->
+      <div class="tab-content" id="transcription-tab">
+        <h2 class="section-title">Test Audio Transcription API</h2>
+
+        <div class="chat-section">
+          <div class="model-selector">
+            <label>Select Transcription Model</label>
+            <select id="transcription-model-select">
+              <option value="">Loading models...</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; margin-bottom: 8px; color: #333; font-weight: 500;">Select Audio File</label>
+            <input type="file" id="audio-file-input" accept="audio/*,.mp3,.mp4,.wav,.m4a,.webm" style="padding: 10px; border: 1px solid #ddd; border-radius: 6px; width: 100%;">
+            <p style="font-size: 12px; color: #666; margin-top: 8px;">Supported formats: MP3, MP4, WAV, M4A, WEBM (Max 25MB)</p>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; margin-bottom: 8px; color: #333; font-weight: 500;">Language (Optional)</label>
+            <input type="text" id="transcription-language" placeholder="e.g., en, id, zh" style="padding: 10px; border: 1px solid #ddd; border-radius: 6px; width: 100%;">
+            <p style="font-size: 12px; color: #666; margin-top: 8px;">Leave empty for auto-detection</p>
+          </div>
+
+          <button class="send-btn" onclick="transcribeAudio()" id="transcription-btn" style="margin-bottom: 15px;">Transcribe Audio</button>
+
+          <div class="status" id="transcription-status"></div>
+
+          <div id="transcription-result" style="display: none; margin-top: 20px;">
+            <h3 style="font-size: 16px; margin-bottom: 10px; color: #333;">Transcription Result:</h3>
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
+              <pre id="transcription-result-text" style="white-space: pre-wrap; word-wrap: break-word; font-family: inherit; margin: 0;"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- OCR Tab -->
+      <div class="tab-content" id="ocr-tab">
+        <h2 class="section-title">Test OCR API</h2>
+
+        <div class="chat-section">
+          <div class="model-selector">
+            <label>Select OCR Model</label>
+            <select id="ocr-model-select">
+              <option value="">Loading models...</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; margin-bottom: 8px; color: #333; font-weight: 500;">Select Image File</label>
+            <input type="file" id="ocr-file-input" accept="image/*,.png,.jpg,.jpeg,.webp,.gif" style="padding: 10px; border: 1px solid #ddd; border-radius: 6px; width: 100%;">
+            <p style="font-size: 12px; color: #666; margin-top: 8px;">Supported formats: PNG, JPEG, WEBP, GIF (Max 10MB)</p>
+          </div>
+
+          <div id="ocr-preview" style="display: none; margin-bottom: 20px;">
+            <label style="display: block; margin-bottom: 8px; color: #333; font-weight: 500;">Preview:</label>
+            <img id="ocr-preview-img" style="max-width: 100%; max-height: 300px; border-radius: 8px; border: 1px solid #ddd;">
+          </div>
+
+          <button class="send-btn" onclick="performOCR()" id="ocr-btn" style="margin-bottom: 15px;">Extract Text</button>
+
+          <div class="status" id="ocr-status"></div>
+
+          <div id="ocr-result" style="display: none; margin-top: 20px;">
+            <h3 style="font-size: 16px; margin-bottom: 10px; color: #333;">Extracted Text:</h3>
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
+              <pre id="ocr-result-text" style="white-space: pre-wrap; word-wrap: break-word; font-family: inherit; margin: 0;"></pre>
+            </div>
           </div>
         </div>
       </div>

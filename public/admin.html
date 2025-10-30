@@ -291,6 +291,9 @@
       <button class="tab" onclick="switchTab('models', event)">Models</button>
       <button class="tab" onclick="switchTab('apikeys', event)">API Keys</button>
       <button class="tab" onclick="switchTab('chat', event)">💬 Chat</button>
+      <button class="tab" onclick="switchTab('embeddings', event)">🔤 Embeddings</button>
+      <button class="tab" onclick="switchTab('transcription', event)">🎙️ Transcribe</button>
+      <button class="tab" onclick="switchTab('ocr', event)">📄 OCR</button>
       <button class="tab" onclick="switchTab('apidocs', event)">📚 API Docs</button>
     </div>
 
@@ -397,6 +400,112 @@
         </div>
       </div>
 
+      <!-- Embeddings Tab -->
+      <div id="embeddings-tab" class="tab-content">
+        <h2 style="font-size: 24px; margin-bottom: 20px; color: #374151;">🔤 Test Embeddings API</h2>
+
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">Select Embedding Model</label>
+            <select id="admin-embedding-model-select" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+              <option value="">Loading models...</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">Text Input</label>
+            <textarea id="admin-embedding-input" placeholder="Enter text to generate embeddings..." style="width: 100%; min-height: 120px; padding: 12px; border: 1px solid #ddd; border-radius: 6px; font-family: inherit; resize: vertical;"></textarea>
+          </div>
+
+          <button class="btn btn-success" onclick="adminGenerateEmbedding()" id="admin-embedding-btn">Generate Embedding</button>
+
+          <div id="admin-embedding-status" style="display: none; padding: 10px; margin-top: 15px; border-radius: 6px; font-size: 13px;"></div>
+
+          <div id="admin-embedding-result" style="display: none; margin-top: 20px; background: white; padding: 20px; border-radius: 8px; border: 1px solid #ddd;">
+            <h3 style="font-size: 16px; margin-bottom: 15px; color: #374151;">Result:</h3>
+            <div style="margin-bottom: 12px;">
+              <strong>Model:</strong> <span id="admin-embedding-result-model"></span>
+            </div>
+            <div style="margin-bottom: 12px;">
+              <strong>Dimensions:</strong> <span id="admin-embedding-result-dims"></span>
+            </div>
+            <div>
+              <strong>Vector (first 10 values):</strong>
+              <pre id="admin-embedding-result-vector" style="background: #1e293b; color: #e2e8f0; padding: 15px; border-radius: 6px; margin-top: 8px; font-size: 12px; overflow-x: auto; line-height: 1.6;"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Transcription Tab -->
+      <div id="transcription-tab" class="tab-content">
+        <h2 style="font-size: 24px; margin-bottom: 20px; color: #374151;">🎙️ Test Audio Transcription API</h2>
+
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">Select Transcription Model</label>
+            <select id="admin-transcription-model-select" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+              <option value="">Loading models...</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">Select Audio File</label>
+            <input type="file" id="admin-audio-file-input" accept="audio/*,.mp3,.mp4,.wav,.m4a,.webm" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+            <p style="font-size: 12px; color: #999; margin-top: 8px;">Supported formats: MP3, MP4, WAV, M4A, WEBM (Max 25MB)</p>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">Language (Optional)</label>
+            <input type="text" id="admin-transcription-language" placeholder="e.g., en, id, zh" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+            <p style="font-size: 12px; color: #999; margin-top: 8px;">Leave empty for auto-detection</p>
+          </div>
+
+          <button class="btn btn-success" onclick="adminTranscribeAudio()" id="admin-transcription-btn">Transcribe Audio</button>
+
+          <div id="admin-transcription-status" style="display: none; padding: 10px; margin-top: 15px; border-radius: 6px; font-size: 13px;"></div>
+
+          <div id="admin-transcription-result" style="display: none; margin-top: 20px; background: white; padding: 20px; border-radius: 8px; border: 1px solid #ddd;">
+            <h3 style="font-size: 16px; margin-bottom: 15px; color: #374151;">Transcription Result:</h3>
+            <pre id="admin-transcription-result-text" style="white-space: pre-wrap; word-wrap: break-word; font-family: inherit; margin: 0; line-height: 1.6;"></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- OCR Tab -->
+      <div id="ocr-tab" class="tab-content">
+        <h2 style="font-size: 24px; margin-bottom: 20px; color: #374151;">📄 Test OCR API</h2>
+
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">Select OCR Model</label>
+            <select id="admin-ocr-model-select" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+              <option value="">Loading models...</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">Select Image File</label>
+            <input type="file" id="admin-ocr-file-input" accept="image/*,.png,.jpg,.jpeg,.webp,.gif" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+            <p style="font-size: 12px; color: #999; margin-top: 8px;">Supported formats: PNG, JPEG, WEBP, GIF (Max 10MB)</p>
+          </div>
+
+          <div id="admin-ocr-preview" style="display: none; margin-bottom: 20px;">
+            <label style="display: block; font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">Preview:</label>
+            <img id="admin-ocr-preview-img" style="max-width: 100%; max-height: 300px; border-radius: 8px; border: 1px solid #ddd;">
+          </div>
+
+          <button class="btn btn-success" onclick="adminPerformOCR()" id="admin-ocr-btn">Extract Text</button>
+
+          <div id="admin-ocr-status" style="display: none; padding: 10px; margin-top: 15px; border-radius: 6px; font-size: 13px;"></div>
+
+          <div id="admin-ocr-result" style="display: none; margin-top: 20px; background: white; padding: 20px; border-radius: 8px; border: 1px solid #ddd;">
+            <h3 style="font-size: 16px; margin-bottom: 15px; color: #374151;">Extracted Text:</h3>
+            <pre id="admin-ocr-result-text" style="white-space: pre-wrap; word-wrap: break-word; font-family: inherit; margin: 0; line-height: 1.6;"></pre>
+          </div>
+        </div>
+      </div>
+
       <!-- API Docs Tab -->
       <div id="apidocs-tab" class="tab-content">
         <div style="margin-bottom: 20px;">
@@ -490,7 +599,6 @@
           <label>Type</label>
           <select id="provider-type">
             <option value="openai">OpenAI Compatible</option>
-            <option value="huggingface">HuggingFace</option>
           </select>
           <small style="color: #666; font-size: 12px;">OpenAI Compatible: Most providers (OpenAI, OpenRouter, Featherless, etc.)</small>
         </div>

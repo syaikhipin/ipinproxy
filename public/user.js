@@ -77,19 +77,64 @@ async function loadModels() {
     // Display models
     const modelsList = document.getElementById('models-list');
     const modelSelect = document.getElementById('model-select');
+    const embeddingSelect = document.getElementById('embedding-model-select');
+    const transcriptionSelect = document.getElementById('transcription-model-select');
+    const ocrSelect = document.getElementById('ocr-model-select');
 
     if (data.data && data.data.length > 0) {
       modelsList.innerHTML = data.data.map(model =>
         `<span class="model-tag">${model.id}</span>`
       ).join('');
 
-      // Hide provider name in model selector
+      // Chat models - all models can be used for chat
       modelSelect.innerHTML = data.data.map(model =>
         `<option value="${model.id}">${model.id}</option>`
       ).join('');
+
+      // Embedding models - filter by name patterns
+      const embeddingModels = data.data.filter(m =>
+        m.id.toLowerCase().includes('embedding') ||
+        m.id.toLowerCase().includes('embed')
+      );
+      if (embeddingModels.length > 0) {
+        embeddingSelect.innerHTML = embeddingModels.map(model =>
+          `<option value="${model.id}">${model.id}</option>`
+        ).join('');
+      } else {
+        embeddingSelect.innerHTML = '<option value="">No embedding models available</option>';
+      }
+
+      // Transcription models - filter by name patterns
+      const transcriptionModels = data.data.filter(m =>
+        m.id.toLowerCase().includes('whisper') ||
+        m.id.toLowerCase().includes('transcri')
+      );
+      if (transcriptionModels.length > 0) {
+        transcriptionSelect.innerHTML = transcriptionModels.map(model =>
+          `<option value="${model.id}">${model.id}</option>`
+        ).join('');
+      } else {
+        transcriptionSelect.innerHTML = '<option value="">No transcription models available</option>';
+      }
+
+      // OCR models - filter by name patterns
+      const ocrModels = data.data.filter(m =>
+        m.id.toLowerCase().includes('ocr') ||
+        m.id.toLowerCase().includes('dots')
+      );
+      if (ocrModels.length > 0) {
+        ocrSelect.innerHTML = ocrModels.map(model =>
+          `<option value="${model.id}">${model.id}</option>`
+        ).join('');
+      } else {
+        ocrSelect.innerHTML = '<option value="">No OCR models available</option>';
+      }
     } else {
       modelsList.innerHTML = '<div class="no-models">No models available</div>';
       modelSelect.innerHTML = '<option value="">No models available</option>';
+      embeddingSelect.innerHTML = '<option value="">No models available</option>';
+      transcriptionSelect.innerHTML = '<option value="">No models available</option>';
+      ocrSelect.innerHTML = '<option value="">No models available</option>';
     }
   } catch (error) {
     console.error('Error loading models:', error);
@@ -117,13 +162,15 @@ function logout() {
   window.location.href = '/login.html';
 }
 
-function switchTab(tabName) {
+function switchTab(tabName, event) {
   // Remove active class from all tabs and contents
   document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
 
   // Add active class to selected tab and content
-  event.target.classList.add('active');
+  if (event && event.target) {
+    event.target.classList.add('active');
+  }
   document.getElementById(`${tabName}-tab`).classList.add('active');
 }
 
@@ -343,8 +390,257 @@ console.log(data);`;
 }
 
 // Keyboard shortcuts
-document.getElementById('message-input').addEventListener('keydown', (e) => {
-  if (e.ctrlKey && e.key === 'Enter') {
-    sendMessage();
+document.addEventListener('DOMContentLoaded', () => {
+  const messageInput = document.getElementById('message-input');
+  if (messageInput) {
+    messageInput.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === 'Enter') {
+        sendMessage();
+      }
+    });
   }
 });
+
+// ============================================
+// EMBEDDINGS FUNCTIONS
+// ============================================
+
+async function generateEmbedding() {
+  const model = document.getElementById('embedding-model-select').value;
+  const input = document.getElementById('embedding-input').value.trim();
+  const btn = document.getElementById('embedding-btn');
+  const status = document.getElementById('embedding-status');
+  const result = document.getElementById('embedding-result');
+
+  if (!model) {
+    status.className = 'status error';
+    status.textContent = 'Please select an embedding model';
+    return;
+  }
+
+  if (!input) {
+    status.className = 'status error';
+    status.textContent = 'Please enter text to generate embeddings';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+  status.style.display = 'none';
+  result.style.display = 'none';
+
+  try {
+    const response = await fetch('/v1/embeddings', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKeyData.key}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: model,
+        input: input
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || 'Failed to generate embedding');
+    }
+
+    const data = await response.json();
+
+    if (!data.data || !data.data[0] || !data.data[0].embedding) {
+      throw new Error('Invalid response format');
+    }
+
+    const embedding = data.data[0].embedding;
+
+    // Display results
+    document.getElementById('embedding-result-model').textContent = data.model || model;
+    document.getElementById('embedding-result-dims').textContent = embedding.length;
+    document.getElementById('embedding-result-vector').textContent =
+      JSON.stringify(embedding.slice(0, 10), null, 2) + '\n... (' + (embedding.length - 10) + ' more values)';
+
+    result.style.display = 'block';
+    status.className = 'status success';
+    status.textContent = `✓ Embedding generated successfully! (${embedding.length} dimensions)`;
+  } catch (error) {
+    status.className = 'status error';
+    status.textContent = `✗ Error: ${error.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate Embedding';
+  }
+}
+
+// ============================================
+// TRANSCRIPTION FUNCTIONS
+// ============================================
+
+async function transcribeAudio() {
+  const model = document.getElementById('transcription-model-select').value;
+  const fileInput = document.getElementById('audio-file-input');
+  const language = document.getElementById('transcription-language').value.trim();
+  const btn = document.getElementById('transcription-btn');
+  const status = document.getElementById('transcription-status');
+  const result = document.getElementById('transcription-result');
+
+  if (!model) {
+    status.className = 'status error';
+    status.textContent = 'Please select a transcription model';
+    return;
+  }
+
+  if (!fileInput.files || !fileInput.files[0]) {
+    status.className = 'status error';
+    status.textContent = 'Please select an audio file';
+    return;
+  }
+
+  const file = fileInput.files[0];
+  const maxSize = 25 * 1024 * 1024; // 25MB
+
+  if (file.size > maxSize) {
+    status.className = 'status error';
+    status.textContent = `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds maximum allowed size (25MB)`;
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Transcribing...';
+  status.style.display = 'none';
+  result.style.display = 'none';
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('model', model);
+    if (language) {
+      formData.append('language', language);
+    }
+
+    const response = await fetch('/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKeyData.key}`
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || 'Failed to transcribe audio');
+    }
+
+    const data = await response.json();
+
+    if (!data.text) {
+      throw new Error('Invalid response format');
+    }
+
+    // Display result
+    document.getElementById('transcription-result-text').textContent = data.text;
+    result.style.display = 'block';
+    status.className = 'status success';
+    status.textContent = `✓ Audio transcribed successfully!`;
+  } catch (error) {
+    status.className = 'status error';
+    status.textContent = `✗ Error: ${error.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Transcribe Audio';
+  }
+}
+
+// ============================================
+// OCR FUNCTIONS
+// ============================================
+
+// Preview image when selected
+document.addEventListener('DOMContentLoaded', () => {
+  const ocrFileInput = document.getElementById('ocr-file-input');
+  if (ocrFileInput) {
+    ocrFileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          document.getElementById('ocr-preview-img').src = e.target.result;
+          document.getElementById('ocr-preview').style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+  }
+});
+
+async function performOCR() {
+  const model = document.getElementById('ocr-model-select').value;
+  const fileInput = document.getElementById('ocr-file-input');
+  const btn = document.getElementById('ocr-btn');
+  const status = document.getElementById('ocr-status');
+  const result = document.getElementById('ocr-result');
+
+  if (!model) {
+    status.className = 'status error';
+    status.textContent = 'Please select an OCR model';
+    return;
+  }
+
+  if (!fileInput.files || !fileInput.files[0]) {
+    status.className = 'status error';
+    status.textContent = 'Please select an image file';
+    return;
+  }
+
+  const file = fileInput.files[0];
+  const maxSize = 10 * 1024 * 1024; // 10MB
+
+  if (file.size > maxSize) {
+    status.className = 'status error';
+    status.textContent = `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds maximum allowed size (10MB)`;
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Extracting...';
+  status.style.display = 'none';
+  result.style.display = 'none';
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('model', model);
+
+    const response = await fetch('/v1/ocr', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKeyData.key}`
+      },
+      body: formData
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || 'Failed to perform OCR');
+    }
+
+    const data = await response.json();
+
+    if (!data.text) {
+      throw new Error('Invalid response format');
+    }
+
+    // Display result
+    document.getElementById('ocr-result-text').textContent = data.text;
+    result.style.display = 'block';
+    status.className = 'status success';
+    status.textContent = `✓ Text extracted successfully!`;
+  } catch (error) {
+    status.className = 'status error';
+    status.textContent = `✗ Error: ${error.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Extract Text';
+  }
+}

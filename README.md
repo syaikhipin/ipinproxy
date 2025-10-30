@@ -27,11 +27,15 @@ A lightweight, zero-dependency OpenAI-compatible API proxy server for routing re
 - **Multi-user API keys** - Create separate API keys for each user with model restrictions
 - **Multi-provider** - Supports multiple AI providers (OpenAI-compatible)
 - **Docker ready** - Optimized Dockerfile with health checks
-- **OpenAI compatible** - Standard OpenAI API format
+- **OpenAI compatible** - Standard OpenAI API format for all endpoints
 - **Web UI** - Beautiful admin panel to manage everything
 - **Local database** - JSON-based storage (no external DB required)
 - **Auto health checks** - Keeps your app alive on free tiers
-- **Built-in chat interface** - Test models and API keys instantly
+- **Built-in chat interface** - Test models and API keys instantly with image upload
+- **Vision support** - Built-in image handling for Claude, GPT-4, Gemini, Qwen VL
+- **Embeddings** - Full support for text embeddings via `/v1/embeddings`
+- **Audio transcription** - Whisper API support via `/v1/audio/transcriptions`
+- **User management** - Create user accounts with dashboard access
 
 ## Quick Start
 
@@ -139,6 +143,8 @@ curl http://localhost:3000/v1/models \
 
 ### Chat Completion
 
+**Text-only request:**
+
 ```bash
 curl http://localhost:3000/v1/chat/completions \
   -H "Content-Type: application/json" \
@@ -151,6 +157,97 @@ curl http://localhost:3000/v1/chat/completions \
     "max_tokens": 1000,
     "temperature": 0.7
   }'
+```
+
+**With image upload (Vision models):**
+
+```bash
+curl http://localhost:3000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -d '{
+    "model": "claude-sonnet-4-5",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What is in this image?"
+          },
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/png;base64,iVBORw0KGgo..."
+            }
+          }
+        ]
+      }
+    ],
+    "max_tokens": 2000,
+    "temperature": 0.7
+  }'
+```
+
+### Embeddings
+
+```bash
+curl http://localhost:3000/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -d '{
+    "model": "text-embedding-3-small",
+    "input": "Your text here",
+    "encoding_format": "float"
+  }'
+```
+
+**Batch embeddings:**
+
+```bash
+curl http://localhost:3000/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -d '{
+    "model": "text-embedding-3-small",
+    "input": ["First text", "Second text", "Third text"]
+  }'
+```
+
+### Audio Transcription (Whisper)
+
+```bash
+curl http://localhost:3000/v1/audio/transcriptions \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -F "file=@audio.mp3" \
+  -F "model=whisper-1" \
+  -F "language=en" \
+  -F "response_format=json"
+```
+
+**Optional parameters:**
+- `language`: ISO-639-1 language code (e.g., "en", "es", "fr")
+- `prompt`: Optional text to guide the transcription style
+- `response_format`: "json", "text", "srt", "verbose_json", "vtt"
+- `temperature`: Sampling temperature between 0 and 1
+- `timestamp_granularities`: Array of "word" or "segment"
+
+### OCR (Image to Text)
+
+```bash
+curl http://localhost:3000/v1/ocr \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -F "file=@document.jpg" \
+  -F "model=dots-ocr"
+```
+
+**Response:**
+```json
+{
+  "text": "Extracted text from image",
+  "model": "dots-ocr",
+  "provider": "chutes-dots-ocr"
+}
 ```
 
 ### Health Check
@@ -168,7 +265,7 @@ curl http://localhost:3000/health
    - **Provider Name**: Display name (e.g., "OpenRouter")
    - **Base URL**: API endpoint (e.g., "https://openrouter.ai/api/v1")
    - **API Key**: Your API key
-   - **Type**: OpenAI or HuggingFace
+   - **Type**: OpenAI Compatible
 5. Click "Save"
 
 ## Adding Custom Models
@@ -205,6 +302,337 @@ A built-in chat interface is available for testing your API keys and models:
 - Verify model availability and responses
 - See which models are working
 - Clear, simple interface for quick testing
+- **Image upload support** for vision models (Claude, GPT-4 Vision, Gemini, Qwen-VL)
+
+## Image Upload Support
+
+The proxy includes **built-in image handling** for vision models with automatic validation and format conversion.
+
+### Supported Features
+
+✅ **Server-side validation**
+- Validates image size (max 20MB)
+- Checks image format (base64 data URLs or HTTP/HTTPS URLs)
+- Provides clear error messages for invalid images
+
+✅ **Provider compatibility**
+- OpenAI-compatible providers (GPT-4 Vision, Claude, Gemini, etc.)
+- Automatic format handling for different providers
+- Base64 data URL support (`data:image/png;base64,...`)
+- External URL support (`https://...`)
+
+✅ **Admin UI integration**
+- Built-in image upload button in Chat tab
+- Image preview before sending
+- Visual indicator for vision-capable models
+- Support for PNG, JPEG, WebP, GIF formats
+
+### Vision Models
+
+Vision models that support image inputs include:
+- **Claude**: `claude-sonnet`, `claude-opus`, `claude-haiku`
+- **OpenAI**: `gpt-4-vision`, `gpt-4-turbo`, `gpt-4o`
+- **Google**: `gemini-2.5-pro`, `gemini-1.5-pro`, `gemini-1.5-flash`
+- **Qwen**: `qwen-vl`, `qwen2-vl`, `qwen3-vl`, `qwen3-vl-plus`
+
+**Qwen VL Family Support:**
+
+The proxy includes special handling for Qwen VL models (Qwen-VL, Qwen2-VL, Qwen3-VL):
+- Automatic detection of Qwen VL models by name pattern
+- Support for both base64 data URLs and external image URLs
+- Optimized image format handling for Qwen's API
+- Full compatibility with OpenAI vision format
+
+### Using Image Upload
+
+**Via Admin UI:**
+1. Login to admin panel
+2. Go to "💬 Chat" tab
+3. Select a vision model (models with 📷 icon)
+4. Click "📎 Image" button to upload
+5. Type your question and click "Send"
+
+**Via API:**
+
+Send images using OpenAI's vision format (array with `text` and `image_url` objects):
+
+```json
+{
+  "model": "claude-sonnet-4-5",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "What's in this image?"
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/jpeg;base64,/9j/4AAQSkZJRg..."
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Image formats supported:**
+- Base64 data URLs: `data:image/png;base64,...`
+- External URLs: `https://example.com/image.jpg`
+
+### Image Size Limits
+
+- **Client-side (Admin UI)**: 10MB max
+- **Server-side (API)**: 20MB max
+- Images exceeding limits will be rejected with a clear error message
+
+### Error Handling
+
+The proxy provides detailed error messages for image-related issues:
+
+```json
+{
+  "error": {
+    "message": "Image size (25.3MB) exceeds maximum allowed size (20MB)",
+    "type": "invalid_request_error",
+    "code": "image_validation_failed"
+  }
+}
+```
+
+Common error codes:
+- `image_validation_failed`: Image too large or invalid format
+- `model_not_found`: Model doesn't exist
+- `provider_not_configured`: Provider missing or disabled
+
+## Embeddings Support
+
+The proxy supports OpenAI-compatible embeddings endpoints for text vectorization.
+
+### Features
+
+✅ **Provider routing** - Route to any OpenAI-compatible embeddings provider
+✅ **Batch processing** - Support for single or multiple text inputs
+✅ **Format options** - Float or base64 encoding formats
+✅ **Model flexibility** - Configure any embedding model via admin panel
+
+### Supported Embedding Models
+
+You can configure any OpenAI-compatible embedding provider:
+- **OpenAI**: `text-embedding-3-small`, `text-embedding-3-large`, `text-embedding-ada-002`
+- **Cohere**: `embed-english-v3.0`, `embed-multilingual-v3.0`
+- **Voyage AI**: `voyage-2`, `voyage-code-2`
+- **Custom providers**: Any provider with OpenAI-compatible `/v1/embeddings` endpoint
+
+### Setup
+
+**Option 1: Using Chutes for Embeddings**
+
+Chutes embeddings use OpenAI-compatible format - works out of the box!
+
+1. **Add Chutes embedding provider** in Admin UI → Providers tab:
+   - Click "➕ Add Provider"
+   - **Provider ID**: `chutes-qwen-embedding`
+   - **Provider Name**: `Chutes Qwen Embedding 8B`
+   - **Base URL**: `https://chutes-qwen-qwen3-embedding-8b.chutes.ai`
+   - **API Key**: Your Chutes API token
+   - **Type**: `OpenAI Compatible`
+   - ✅ **Enabled**: Checked
+   - Click "Save"
+
+2. **Add embedding model** in Models tab:
+   - Click "➕ Add Model"
+   - **Display Name**: `Qwen 3 Embedding 8B`
+   - **Model ID**: `qwen3-embedding-8b` (or any name)
+   - **Provider**: Select `chutes-qwen-embedding`
+   - ✅ **Enabled**: Checked
+   - Click "Save"
+
+3. **Use via API**:
+```bash
+curl http://localhost:3000/v1/embeddings \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen3-embedding-8b",
+    "input": "Hello world"
+  }'
+```
+
+**Option 2: Using OpenAI for Embeddings**
+
+1. Add provider:
+   - Base URL: `https://api.openai.com/v1`
+   - API Key: Your OpenAI API key
+
+2. Add models: `text-embedding-3-small`, `text-embedding-3-large`
+
+3. Use the same API format as above
+
+## OCR (Optical Character Recognition) Support
+
+The proxy supports OCR for extracting text from images.
+
+### Features
+
+✅ **Image-to-text** - Extract text from images automatically
+✅ **Multiple formats** - PNG, JPEG, JPG, WEBP, GIF
+✅ **Chutes RedNote Dots OCR** - Specialized OCR model
+✅ **Simple API** - Upload image, get text back
+
+### Setup
+
+**Add Chutes RedNote Dots OCR:**
+
+1. **Provider** (already added to database):
+   - ID: `chutes-dots-ocr`
+   - Base URL: `https://chutes-rednote-hilab-dots-ocr.chutes.ai`
+   - API Key: Your Chutes token
+
+2. **Model** (already added to database):
+   - ID: `dots-ocr`
+   - Name: RedNote Dots OCR
+   - Provider: `chutes-dots-ocr`
+
+### Usage
+
+```bash
+curl http://localhost:3000/v1/ocr \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -F "file=@document.jpg" \
+  -F "model=dots-ocr"
+```
+
+**Response:**
+```json
+{
+  "text": "Extracted text from the image...",
+  "model": "dots-ocr",
+  "provider": "chutes-dots-ocr"
+}
+```
+
+### Supported Image Formats
+
+- **PNG** - Portable Network Graphics
+- **JPEG/JPG** - Joint Photographic Experts Group
+- **WEBP** - Modern web image format
+- **GIF** - Graphics Interchange Format
+
+### Use Cases
+
+- Extract text from scanned documents
+- Read text from screenshots
+- OCR receipts and invoices
+- Parse handwritten notes (if model supports)
+- Extract data from photos
+
+## Audio Transcription Support
+
+The proxy supports OpenAI-compatible audio transcription (Whisper API) for speech-to-text conversion.
+
+### Features
+
+✅ **Multi-format support** - MP3, MP4, MPEG, MPGA, M4A, WAV, WEBM
+✅ **Language detection** - Automatic or specified language
+✅ **Multiple output formats** - JSON, text, SRT, VTT, verbose JSON
+✅ **Timestamp support** - Word-level or segment-level timestamps
+✅ **Large file handling** - Up to 5 minutes timeout for processing
+
+### Supported Transcription Models
+
+Configure any OpenAI-compatible Whisper provider:
+- **OpenAI**: `whisper-1`
+- **Groq**: `whisper-large-v3` (ultra-fast transcription)
+- **Custom Whisper**: Self-hosted Whisper API endpoints
+
+### Setup
+
+**Option 1: Using Chutes for Transcription**
+
+Chutes uses a different API format - the proxy automatically detects and handles this!
+
+1. **Add Chutes Whisper provider** in Admin UI → Providers tab:
+   - Click "➕ Add Provider"
+   - **Provider ID**: `chutes-whisper-large-v3`
+   - **Provider Name**: `Chutes Whisper Large V3`
+   - **Base URL**: `https://chutes-whisper-large-v3.chutes.ai` (the exact model URL)
+   - **API Key**: Your Chutes API token
+   - **Type**: `OpenAI Compatible`
+   - ✅ **Enabled**: Checked
+   - Click "Save"
+
+2. **Add Whisper model** in Models tab:
+   - Click "➕ Add Model"
+   - **Display Name**: `Whisper Large V3`
+   - **Model ID**: `whisper-large-v3` (or any name you prefer)
+   - **Provider**: Select `chutes-whisper-large-v3`
+   - ✅ **Enabled**: Checked
+   - Click "Save"
+
+3. **Use via API** (same format as OpenAI!):
+```bash
+curl http://localhost:3000/v1/audio/transcriptions \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -F "file=@audio.mp3" \
+  -F "model=whisper-large-v3"
+```
+
+**The proxy automatically:**
+- ✅ Detects it's a Chutes provider (by checking URL contains `chutes.ai`)
+- ✅ Converts multipart file to base64 `audio_b64`
+- ✅ Routes to `/transcribe` instead of `/audio/transcriptions`
+- ✅ Transforms response back to OpenAI format
+
+**Option 2: Using OpenAI/Groq (Standard Format)**
+
+1. Add provider with Base URL:
+   - OpenAI: `https://api.openai.com/v1`
+   - Groq: `https://api.groq.com/openai/v1`
+
+2. Add model: `whisper-1` (OpenAI) or `whisper-large-v3-turbo` (Groq)
+
+3. Use the same API format as above
+
+### Audio Format Requirements
+
+**All Whisper providers (Chutes, OpenAI, Groq):**
+- ✅ **Supported**: MP3, MP4, MPEG, MPGA, M4A, WAV, WEBM
+- ✅ **File size limit**: Up to 25MB
+- ✅ **Automatic format handling**: No conversion needed
+
+**Optional: Compress large audio files:**
+
+```bash
+# If your file is > 25MB, compress it
+ffmpeg -i large_audio.mp3 -ab 64k compressed_audio.mp3
+
+# Or reduce sample rate
+ffmpeg -i large_audio.mp3 -ar 16000 compressed_audio.mp3
+```
+
+### Response Formats
+
+- **json** (default): `{"text": "transcription here"}`
+- **text**: Plain text output
+- **srt**: SubRip subtitle format
+- **vtt**: WebVTT subtitle format
+- **verbose_json**: Includes word-level timestamps and confidence scores
+
+### Example with Options
+
+```bash
+curl http://localhost:3000/v1/audio/transcriptions \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -F "file=@meeting.mp3" \
+  -F "model=whisper-1" \
+  -F "language=en" \
+  -F "response_format=verbose_json" \
+  -F "timestamp_granularities[]=word"
+```
 
 ## Endpoints
 
@@ -220,8 +648,15 @@ A built-in chat interface is available for testing your API keys and models:
 | `/api/admin/models/:id` | PUT/DELETE | Update/delete model |
 | `/api/admin/apikeys` | GET/POST | List/create API keys |
 | `/api/admin/apikeys/:id` | PUT/DELETE | Update/delete API key |
+| `/api/admin/users` | GET/POST | List/create users |
+| `/api/admin/users/:id` | PUT/DELETE | Update/delete user |
+| `/api/user/login` | POST | User login (non-admin) |
+| `/api/user/me` | GET | Get current user info |
 | `/v1/models` | GET | List available models (OpenAI API) |
-| `/v1/chat/completions` | POST | Chat completion (OpenAI API) |
+| `/v1/chat/completions` | POST | Chat completion with vision support |
+| `/v1/embeddings` | POST | Text embeddings generation |
+| `/v1/audio/transcriptions` | POST | Audio transcription (Whisper) |
+| `/v1/ocr` | POST | OCR - Extract text from images |
 | `/health` | GET | Health check |
 
 ## Security
@@ -397,6 +832,148 @@ docker restart ipin-proxy
 - Verify provider is enabled
 - Refresh browser
 - Check `/v1/models` endpoint
+
+## Chutes Integration Guide
+
+### What is Chutes?
+
+Chutes provides AI model endpoints with unique URLs per model. Unlike traditional providers, each model has its own base URL.
+
+### Key Differences
+
+| Feature | Standard Providers | Chutes |
+|---------|-------------------|---------|
+| Base URL | One URL for all models | Unique URL per model |
+| Chat | `/v1/chat/completions` | `/v1/chat/completions` ✅ |
+| Embeddings | `/v1/embeddings` | `/v1/embeddings` ✅ |
+| Transcription Endpoint | `/v1/audio/transcriptions` | `/transcribe` (auto-handled) |
+| Audio Format | MP3, MP4, WAV, etc. (25MB) | Same ✅ |
+| Audio Upload | Multipart file | Base64 (auto-converted) |
+
+### Setting Up Chutes Models
+
+**Rule: One provider per model** (because each model has a unique base URL)
+
+#### Example 1: Chutes Whisper Large V3
+
+```
+Provider Setup:
+  Provider ID:    chutes-whisper-large-v3
+  Provider Name:  Chutes Whisper Large V3
+  Base URL:       https://chutes-whisper-large-v3.chutes.ai
+  API Key:        YOUR_CHUTES_TOKEN
+  Type:           OpenAI Compatible
+
+Model Setup:
+  Display Name:   Whisper Large V3
+  Model ID:       whisper-large-v3
+  Provider:       chutes-whisper-large-v3
+```
+
+**Test:**
+```bash
+curl http://localhost:3000/v1/audio/transcriptions \
+  -H "Authorization: Bearer YOUR_KEY" \
+  -F "file=@audio.mp3" \
+  -F "model=whisper-large-v3"
+```
+
+**Supported audio formats:** MP3, MP4, MPEG, MPGA, M4A, WAV, WEBM (up to 25MB)
+
+#### Example 2: Chutes Qwen Embedding
+
+```
+Provider Setup:
+  Provider ID:    chutes-qwen-embedding
+  Provider Name:  Chutes Qwen Embedding 8B
+  Base URL:       https://chutes-qwen-qwen3-embedding-8b.chutes.ai
+  API Key:        YOUR_CHUTES_TOKEN
+  Type:           OpenAI Compatible
+
+Model Setup:
+  Display Name:   Qwen 3 Embedding 8B
+  Model ID:       qwen3-embedding-8b
+  Provider:       chutes-qwen-embedding
+```
+
+**Test:**
+```bash
+curl http://localhost:3000/v1/embeddings \
+  -H "Authorization: Bearer YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "qwen3-embedding-8b", "input": "Hello"}'
+```
+
+#### Example 3: Chutes Chat Model
+
+```
+Provider Setup:
+  Provider ID:    chutes-llama-3-1-70b
+  Provider Name:  Chutes Llama 3.1 70B
+  Base URL:       https://chutes-llama-3-1-70b.chutes.ai
+  API Key:        YOUR_CHUTES_TOKEN
+  Type:           OpenAI Compatible
+
+Model Setup:
+  Display Name:   Llama 3.1 70B
+  Model ID:       llama-3.1-70b
+  Provider:       chutes-llama-3-1-70b
+```
+
+**Test:**
+```bash
+curl http://localhost:3000/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "llama-3.1-70b",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+### How the Proxy Handles Chutes
+
+**Automatic Detection:**
+- The proxy detects Chutes providers by checking if the base URL contains `chutes.ai`
+
+**For Embeddings & Chat:**
+- Uses standard OpenAI format (no changes needed)
+
+**For Transcription:**
+- ✅ Automatically converts multipart file upload to base64 `audio_b64`
+- ✅ Routes to `/transcribe` instead of `/audio/transcriptions`
+- ✅ Transforms Chutes response to OpenAI format
+- ✅ You still use standard OpenAI API format!
+- ✅ Supports all audio formats (MP3, MP4, WAV, M4A, etc.)
+
+### Finding Chutes Model URLs
+
+Check Chutes documentation or API explorer for exact URLs:
+- Chat models: `https://chutes-{model-name}.chutes.ai`
+- Embedding models: `https://chutes-{model-name}.chutes.ai`
+- Whisper models: `https://chutes-whisper-{version}.chutes.ai`
+
+### Multiple Chutes Models Example
+
+You can add as many Chutes models as you want:
+
+```
+Providers:
+  ├── chutes-whisper-large-v3
+  ├── chutes-qwen-embedding
+  ├── chutes-llama-3-1-70b
+  ├── chutes-mistral-large
+  └── openai (for comparison)
+
+Models:
+  ├── whisper-large-v3        → chutes-whisper-large-v3
+  ├── qwen3-embedding-8b      → chutes-qwen-embedding
+  ├── llama-3.1-70b          → chutes-llama-3-1-70b
+  ├── mistral-large          → chutes-mistral-large
+  └── gpt-4o                 → openai
+```
+
+All accessible through the same unified API! 🎉
 
 ## License
 

@@ -177,6 +177,69 @@ function makeRequest(url, options, data) {
   });
 }
 
+// Make multipart/form-data request (for audio uploads)
+function makeMultipartRequest(url, options, formData) {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url);
+    const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+
+    // Build multipart body
+    let body = '';
+    for (const [key, value] of Object.entries(formData)) {
+      body += `--${boundary}\r\n`;
+
+      if (value && typeof value === 'object' && value.data) {
+        // File field
+        body += `Content-Disposition: form-data; name="${key}"; filename="${value.filename}"\r\n`;
+        body += `Content-Type: ${value.contentType || 'application/octet-stream'}\r\n\r\n`;
+        body += value.data.toString('binary');
+      } else {
+        // Regular field
+        body += `Content-Disposition: form-data; name="${key}"\r\n\r\n`;
+        body += value;
+      }
+      body += '\r\n';
+    }
+    body += `--${boundary}--\r\n`;
+
+    const bodyBuffer = Buffer.from(body, 'binary');
+
+    const requestOptions = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || 443,
+      path: parsedUrl.pathname,
+      method: options.method || 'POST',
+      headers: {
+        ...options.headers,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': bodyBuffer.length
+      },
+      timeout: options.timeout || 120000
+    };
+
+    const req = https.request(requestOptions, (res) => {
+      let responseBody = '';
+      res.on('data', chunk => responseBody += chunk);
+      res.on('end', () => {
+        try {
+          resolve({ status: res.statusCode, data: JSON.parse(responseBody), headers: res.headers });
+        } catch (e) {
+          resolve({ status: res.statusCode, data: responseBody, headers: res.headers });
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Request timeout'));
+    });
+
+    req.write(bodyBuffer);
+    req.end();
+  });
+}
+
 // Parse request body
 function parseBody(req) {
   return new Promise((resolve, reject) => {
@@ -187,6 +250,65 @@ function parseBody(req) {
         resolve(body ? JSON.parse(body) : {});
       } catch (e) {
         reject(new Error('Invalid JSON'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+// Parse multipart/form-data (for audio files)
+function parseMultipartFormData(req) {
+  return new Promise((resolve, reject) => {
+    const contentType = req.headers['content-type'] || '';
+    const boundaryMatch = contentType.match(/boundary=([^;]+)/);
+
+    if (!boundaryMatch) {
+      return reject(new Error('Invalid multipart/form-data: missing boundary'));
+    }
+
+    const boundary = '--' + boundaryMatch[1];
+    const chunks = [];
+
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => {
+      try {
+        const buffer = Buffer.concat(chunks);
+        const parts = {};
+        const stringData = buffer.toString('binary');
+        const sections = stringData.split(boundary);
+
+        for (const section of sections) {
+          if (section.includes('Content-Disposition')) {
+            const nameMatch = section.match(/name="([^"]+)"/);
+            if (!nameMatch) continue;
+
+            const fieldName = nameMatch[1];
+            const filenameMatch = section.match(/filename="([^"]+)"/);
+
+            // Find where headers end and content begins
+            const headerEnd = section.indexOf('\r\n\r\n');
+            if (headerEnd === -1) continue;
+
+            const content = section.substring(headerEnd + 4);
+            const endBoundary = content.lastIndexOf('\r\n');
+            const actualContent = content.substring(0, endBoundary !== -1 ? endBoundary : content.length);
+
+            if (filenameMatch) {
+              // File field
+              parts[fieldName] = {
+                filename: filenameMatch[1],
+                data: Buffer.from(actualContent, 'binary')
+              };
+            } else {
+              // Regular field
+              parts[fieldName] = actualContent.trim();
+            }
+          }
+        }
+
+        resolve(parts);
+      } catch (e) {
+        reject(new Error('Failed to parse multipart/form-data: ' + e.message));
       }
     });
     req.on('error', reject);
@@ -212,59 +334,177 @@ function sendFile(res, filepath, contentType) {
   });
 }
 
-// Transform request for HuggingFace
-function transformHuggingFaceRequest(messages, params) {
-  let prompt = '';
-  for (const msg of messages) {
-    if (msg.role === 'system') {
-      prompt += `System: ${msg.content}\n\n`;
-    } else if (msg.role === 'user') {
-      prompt += `User: ${msg.content}\n\n`;
-    } else if (msg.role === 'assistant') {
-      prompt += `Assistant: ${msg.content}\n\n`;
-    }
+// Provider format detection
+function isChutesProvider(baseUrl) {
+  // Chutes providers use format: https://chutes-{model-name}.chutes.ai
+  return baseUrl && baseUrl.includes('chutes.ai');
+}
+
+// Convert audio buffer to base64 string (for Chutes format)
+function audioBufferToBase64(buffer) {
+  return buffer.toString('base64');
+}
+
+// Transform Chutes transcription response to OpenAI format
+function transformChutesTranscriptionResponse(chutesResponse) {
+  // Chutes returns various formats, normalize to OpenAI format
+  if (typeof chutesResponse === 'string') {
+    return { text: chutesResponse };
   }
-  prompt += 'Assistant:';
+
+  if (chutesResponse.text) {
+    return { text: chutesResponse.text };
+  }
+
+  if (chutesResponse.transcription) {
+    return { text: chutesResponse.transcription };
+  }
+
+  // If already in correct format
+  return chutesResponse;
+}
+
+// Image handling utilities
+function isImageContent(content) {
+  if (!Array.isArray(content)) return false;
+  return content.some(item => item.type === 'image_url' && item.image_url);
+}
+
+function extractImageData(imageUrl) {
+  // Extract base64 data from data URL
+  // Format: data:image/png;base64,iVBORw0KGgoAAAANS...
+  if (!imageUrl || typeof imageUrl !== 'string') return null;
+
+  const dataUrlMatch = imageUrl.match(/^data:image\/(\w+);base64,(.+)$/);
+  if (dataUrlMatch) {
+    return {
+      mediaType: dataUrlMatch[1], // png, jpeg, webp, gif
+      base64Data: dataUrlMatch[2],
+      url: imageUrl
+    };
+  }
+
+  // If it's already a URL (not base64), return as-is
+  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+    return {
+      mediaType: null,
+      base64Data: null,
+      url: imageUrl
+    };
+  }
+
+  return null;
+}
+
+function validateImageSize(base64Data) {
+  if (!base64Data) return { valid: true, size: 0 };
+
+  // Calculate approximate size from base64
+  // Base64 increases size by ~33%, so divide by 0.75 to get original size
+  const sizeInBytes = (base64Data.length * 3) / 4;
+  const sizeInMB = sizeInBytes / (1024 * 1024);
+
+  // Max 20MB for server-side (more lenient than client's 10MB)
+  const MAX_SIZE_MB = 20;
 
   return {
-    inputs: prompt,
-    parameters: {
-      max_new_tokens: params.max_tokens || 1024,
-      temperature: params.temperature || 0.7,
-      top_p: params.top_p || 0.9,
-      return_full_text: false
-    }
+    valid: sizeInMB <= MAX_SIZE_MB,
+    size: sizeInMB,
+    maxSize: MAX_SIZE_MB
   };
 }
 
-// Transform HuggingFace response to OpenAI format
-function transformHuggingFaceResponse(hfResponse, model) {
-  // Validate HuggingFace response format
-  if (!Array.isArray(hfResponse) || hfResponse.length === 0) {
-    throw new Error('Invalid HuggingFace response format: expected non-empty array');
-  }
+// Transform messages with images for different provider types
+function transformMessagesForProvider(messages, providerType, modelId = '') {
+  if (!messages || !Array.isArray(messages)) return messages;
 
-  const text = hfResponse[0]?.generated_text || '';
+  // Check if this is a Qwen VL model
+  const isQwenVL = modelId && (
+    modelId.toLowerCase().includes('qwen-vl') ||
+    modelId.toLowerCase().includes('qwen2-vl') ||
+    modelId.toLowerCase().includes('qwen3-vl')
+  );
 
-  return {
-    id: `chatcmpl-${Date.now()}`,
-    object: 'chat.completion',
-    created: Math.floor(Date.now() / 1000),
-    model: model,
-    choices: [{
-      index: 0,
-      message: {
-        role: 'assistant',
-        content: text.trim()
-      },
-      finish_reason: 'stop'
-    }],
-    usage: {
-      prompt_tokens: 0,
-      completion_tokens: 0,
-      total_tokens: 0
+  return messages.map(msg => {
+    if (!msg.content || !Array.isArray(msg.content)) {
+      return msg; // Text-only message
     }
-  };
+
+    // Check if this message has images
+    const hasImage = isImageContent(msg.content);
+    if (!hasImage) {
+      return msg;
+    }
+
+    // Transform based on provider type and model
+    if (providerType === 'openai') {
+      // Handle Qwen VL models specifically
+      if (isQwenVL) {
+        return {
+          ...msg,
+          content: msg.content.map(item => {
+            if (item.type === 'image_url' && item.image_url) {
+              const imageData = extractImageData(item.image_url.url);
+              if (!imageData) {
+                console.warn('Invalid image URL format:', item.image_url.url);
+                return null;
+              }
+
+              // Validate size
+              if (imageData.base64Data) {
+                const validation = validateImageSize(imageData.base64Data);
+                if (!validation.valid) {
+                  throw new Error(`Image size (${validation.size.toFixed(2)}MB) exceeds maximum allowed size (${validation.maxSize}MB)`);
+                }
+              }
+
+              // Qwen VL format: supports both data URLs and external URLs
+              return {
+                type: 'image_url',
+                image_url: {
+                  url: imageData.url
+                }
+              };
+            }
+            return item;
+          }).filter(Boolean)
+        };
+      }
+
+      // Standard OpenAI/Claude/Gemini format
+      return {
+        ...msg,
+        content: msg.content.map(item => {
+          if (item.type === 'image_url' && item.image_url) {
+            const imageData = extractImageData(item.image_url.url);
+            if (!imageData) {
+              console.warn('Invalid image URL format:', item.image_url.url);
+              return null;
+            }
+
+            // Validate size
+            if (imageData.base64Data) {
+              const validation = validateImageSize(imageData.base64Data);
+              if (!validation.valid) {
+                throw new Error(`Image size (${validation.size.toFixed(2)}MB) exceeds maximum allowed size (${validation.maxSize}MB)`);
+              }
+            }
+
+            return {
+              type: 'image_url',
+              image_url: {
+                url: imageData.url
+              }
+            };
+          }
+          return item;
+        }).filter(Boolean)
+      };
+    }
+
+    // For other provider types, keep original format
+    return msg;
+  });
 }
 
 function normalizeUsage(usage) {
@@ -890,6 +1130,12 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req);
       const { model, messages, stream, ...params } = body;
 
+      // Detect if request contains images
+      const hasImages = messages && messages.some(msg => isImageContent(msg.content));
+      if (hasImages) {
+        console.log(`[${new Date().toISOString()}] Image upload detected in request for model: ${model}`);
+      }
+
       // Check if model is supported
       const providerName = MODEL_ROUTES[model];
       if (!providerName) {
@@ -927,46 +1173,426 @@ const server = http.createServer(async (req, res) => {
 
       console.log(`[${new Date().toISOString()}] ${model} -> ${providerName}`);
 
-      let response;
+      // Transform messages for provider (handles images, validation, etc.)
+      let transformedMessages;
+      try {
+        transformedMessages = transformMessagesForProvider(messages, provider.type, model);
+      } catch (error) {
+        console.error(`[${new Date().toISOString()}] Image validation error:`, error.message);
+        return sendJSON(res, 400, {
+          error: {
+            message: error.message,
+            type: 'invalid_request_error',
+            code: 'image_validation_failed'
+          }
+        });
+      }
 
-      if (provider.type === 'huggingface') {
-        // HuggingFace request
-        const hfRequest = transformHuggingFaceRequest(messages, params);
-        const url = `${provider.baseUrl}/${model}`;
+      // OpenAI-compatible request
+      const providerRequest = {
+        model: model,
+        messages: transformedMessages,
+        stream: stream || false,
+        ...params
+      };
 
-        response = await makeRequest(url, {
+      const response = await makeRequest(
+        `${provider.baseUrl}/chat/completions`,
+        {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${provider.apiKey}`,
             'Content-Type': 'application/json'
           },
           timeout: 120000
-        }, hfRequest);
+        },
+        providerRequest
+      );
+
+      console.log(`[${new Date().toISOString()}] ${providerName} response: ${response.status}`);
+
+      if (response.status !== 200) {
+        return sendJSON(res, response.status, response.data);
+      }
+
+      const normalizedResponse = normalizeToOpenAIResponse(response.data, model);
+      return sendJSON(res, 200, normalizedResponse);
+    }
+
+    // POST /v1/embeddings
+    if (req.method === 'POST' && req.url === '/v1/embeddings') {
+      // Authenticate
+      const apiKey = authenticate(req);
+      if (!apiKey) {
+        return sendJSON(res, 401, {
+          error: {
+            message: 'Invalid authentication credentials',
+            type: 'invalid_request_error',
+            code: 'invalid_api_key'
+          }
+        });
+      }
+
+      const body = await parseBody(req);
+      const { model, input, encoding_format, ...params } = body;
+
+      // Validate input
+      if (!input) {
+        return sendJSON(res, 400, {
+          error: {
+            message: 'Missing required parameter: input',
+            type: 'invalid_request_error',
+            code: 'missing_input'
+          }
+        });
+      }
+
+      // Check if model is supported
+      const providerName = MODEL_ROUTES[model];
+      if (!providerName) {
+        return sendJSON(res, 400, {
+          error: {
+            message: `Model '${model}' not supported. Available models: ${Object.keys(MODEL_ROUTES).join(', ')}`,
+            type: 'invalid_request_error',
+            code: 'model_not_found'
+          }
+        });
+      }
+
+      // Check if API key has permission to use this model
+      const allowedModels = apiKey.allowedModels || [];
+      if (allowedModels.length > 0 && !allowedModels.includes(model)) {
+        return sendJSON(res, 403, {
+          error: {
+            message: `Access denied. This API key does not have permission to use model '${model}'.`,
+            type: 'permission_error',
+            code: 'model_not_allowed'
+          }
+        });
+      }
+
+      const provider = PROVIDERS[providerName];
+      if (!provider || !provider.apiKey) {
+        return sendJSON(res, 500, {
+          error: {
+            message: `Provider '${providerName}' not configured. Missing API key.`,
+            type: 'server_error',
+            code: 'provider_not_configured'
+          }
+        });
+      }
+
+      console.log(`[${new Date().toISOString()}] Embeddings: ${model} -> ${providerName}`);
+
+      // Build embeddings request (OpenAI-compatible format)
+      const embeddingRequest = {
+        model: model,
+        input: input,
+        encoding_format: encoding_format || 'float',
+        ...params
+      };
+
+      const response = await makeRequest(
+        `${provider.baseUrl}/embeddings`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${provider.apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 120000
+        },
+        embeddingRequest
+      );
+
+      console.log(`[${new Date().toISOString()}] ${providerName} embeddings response: ${response.status}`);
+
+      if (response.status !== 200) {
+        return sendJSON(res, response.status, response.data);
+      }
+
+      // Return embeddings response (already in OpenAI format)
+      return sendJSON(res, 200, response.data);
+    }
+
+    // POST /v1/audio/transcriptions
+    if (req.method === 'POST' && req.url === '/v1/audio/transcriptions') {
+      // Authenticate
+      const apiKey = authenticate(req);
+      if (!apiKey) {
+        return sendJSON(res, 401, {
+          error: {
+            message: 'Invalid authentication credentials',
+            type: 'invalid_request_error',
+            code: 'invalid_api_key'
+          }
+        });
+      }
+
+      // Parse multipart form data
+      let formData;
+      try {
+        formData = await parseMultipartFormData(req);
+      } catch (error) {
+        return sendJSON(res, 400, {
+          error: {
+            message: 'Failed to parse multipart/form-data: ' + error.message,
+            type: 'invalid_request_error',
+            code: 'invalid_multipart_data'
+          }
+        });
+      }
+
+      const model = formData.model;
+      const file = formData.file;
+
+      // Validate required fields
+      if (!file || !file.data) {
+        return sendJSON(res, 400, {
+          error: {
+            message: 'Missing required parameter: file',
+            type: 'invalid_request_error',
+            code: 'missing_file'
+          }
+        });
+      }
+
+      if (!model) {
+        return sendJSON(res, 400, {
+          error: {
+            message: 'Missing required parameter: model',
+            type: 'invalid_request_error',
+            code: 'missing_model'
+          }
+        });
+      }
+
+      // Check if model is supported
+      const providerName = MODEL_ROUTES[model];
+      if (!providerName) {
+        return sendJSON(res, 400, {
+          error: {
+            message: `Model '${model}' not supported. Available models: ${Object.keys(MODEL_ROUTES).join(', ')}`,
+            type: 'invalid_request_error',
+            code: 'model_not_found'
+          }
+        });
+      }
+
+      // Check if API key has permission to use this model
+      const allowedModels = apiKey.allowedModels || [];
+      if (allowedModels.length > 0 && !allowedModels.includes(model)) {
+        return sendJSON(res, 403, {
+          error: {
+            message: `Access denied. This API key does not have permission to use model '${model}'.`,
+            type: 'permission_error',
+            code: 'model_not_allowed'
+          }
+        });
+      }
+
+      const provider = PROVIDERS[providerName];
+      if (!provider || !provider.apiKey) {
+        return sendJSON(res, 500, {
+          error: {
+            message: `Provider '${providerName}' not configured. Missing API key.`,
+            type: 'server_error',
+            code: 'provider_not_configured'
+          }
+        });
+      }
+
+      console.log(`[${new Date().toISOString()}] Transcription: ${model} -> ${providerName}, file: ${file.filename}`);
+
+      // Check if this is a Chutes provider
+      const isChutes = isChutesProvider(provider.baseUrl);
+      let response;
+
+      if (isChutes) {
+        // Chutes format: POST /transcribe with audio_b64
+        console.log(`[${new Date().toISOString()}] Using Chutes format for transcription (file: ${file.filename})`);
+
+        const audio_b64 = audioBufferToBase64(file.data);
+
+        const chutesRequest = {
+          audio_b64: audio_b64
+        };
+
+        // Add optional parameters if Chutes supports them
+        if (formData.language) chutesRequest.language = formData.language;
+        if (formData.prompt) chutesRequest.prompt = formData.prompt;
+
+        response = await makeRequest(
+          `${provider.baseUrl}/transcribe`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${provider.apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 300000 // 5 minutes for large audio files
+          },
+          chutesRequest
+        );
+
+        console.log(`[${new Date().toISOString()}] ${providerName} transcription response: ${response.status}`);
 
         if (response.status !== 200) {
-          return sendJSON(res, response.status, {
-            error: {
-              message: response.data.error || 'HuggingFace API error',
-              type: 'api_error',
-              code: 'provider_error'
-            }
-          });
+          return sendJSON(res, response.status, response.data);
         }
 
-        const openaiResponse = transformHuggingFaceResponse(response.data, model);
+        // Transform Chutes response to OpenAI format
+        const openaiResponse = transformChutesTranscriptionResponse(response.data);
         return sendJSON(res, 200, openaiResponse);
 
       } else {
-        // OpenAI-compatible request
-        const providerRequest = {
-          model: model,
-          messages: messages,
-          stream: stream || false,
-          ...params
+        // Standard OpenAI format: POST /audio/transcriptions with multipart file
+        console.log(`[${new Date().toISOString()}] Using OpenAI format for transcription`);
+
+        const transcriptionFormData = {
+          file: {
+            filename: file.filename,
+            data: file.data,
+            contentType: 'application/octet-stream'
+          },
+          model: model
+        };
+
+        // Add optional parameters if present
+        if (formData.language) transcriptionFormData.language = formData.language;
+        if (formData.prompt) transcriptionFormData.prompt = formData.prompt;
+        if (formData.response_format) transcriptionFormData.response_format = formData.response_format;
+        if (formData.temperature) transcriptionFormData.temperature = formData.temperature;
+        if (formData.timestamp_granularities) transcriptionFormData.timestamp_granularities = formData.timestamp_granularities;
+
+        response = await makeMultipartRequest(
+          `${provider.baseUrl}/audio/transcriptions`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${provider.apiKey}`
+            },
+            timeout: 300000 // 5 minutes for large audio files
+          },
+          transcriptionFormData
+        );
+
+        console.log(`[${new Date().toISOString()}] ${providerName} transcription response: ${response.status}`);
+
+        if (response.status !== 200) {
+          return sendJSON(res, response.status, response.data);
+        }
+
+        // Return transcription response (already in OpenAI format)
+        return sendJSON(res, 200, response.data);
+      }
+    }
+
+    // POST /v1/ocr - Image OCR (Optical Character Recognition)
+    if (req.method === 'POST' && req.url === '/v1/ocr') {
+      // Authenticate
+      const apiKey = authenticate(req);
+      if (!apiKey) {
+        return sendJSON(res, 401, {
+          error: {
+            message: 'Invalid authentication credentials',
+            type: 'invalid_request_error',
+            code: 'invalid_api_key'
+          }
+        });
+      }
+
+      // Parse multipart form data
+      let formData;
+      try {
+        formData = await parseMultipartFormData(req);
+      } catch (error) {
+        return sendJSON(res, 400, {
+          error: {
+            message: 'Failed to parse multipart/form-data: ' + error.message,
+            type: 'invalid_request_error',
+            code: 'invalid_multipart_data'
+          }
+        });
+      }
+
+      const model = formData.model;
+      const file = formData.file;
+
+      // Validate required fields
+      if (!file || !file.data) {
+        return sendJSON(res, 400, {
+          error: {
+            message: 'Missing required parameter: file (image)',
+            type: 'invalid_request_error',
+            code: 'missing_file'
+          }
+        });
+      }
+
+      if (!model) {
+        return sendJSON(res, 400, {
+          error: {
+            message: 'Missing required parameter: model',
+            type: 'invalid_request_error',
+            code: 'missing_model'
+          }
+        });
+      }
+
+      // Check if model is supported
+      const providerName = MODEL_ROUTES[model];
+      if (!providerName) {
+        return sendJSON(res, 400, {
+          error: {
+            message: `Model '${model}' not supported. Available models: ${Object.keys(MODEL_ROUTES).join(', ')}`,
+            type: 'invalid_request_error',
+            code: 'model_not_found'
+          }
+        });
+      }
+
+      // Check if API key has permission to use this model
+      const allowedModels = apiKey.allowedModels || [];
+      if (allowedModels.length > 0 && !allowedModels.includes(model)) {
+        return sendJSON(res, 403, {
+          error: {
+            message: `Access denied. This API key does not have permission to use model '${model}'.`,
+            type: 'permission_error',
+            code: 'model_not_allowed'
+          }
+        });
+      }
+
+      const provider = PROVIDERS[providerName];
+      if (!provider || !provider.apiKey) {
+        return sendJSON(res, 500, {
+          error: {
+            message: `Provider '${providerName}' not configured. Missing API key.`,
+            type: 'server_error',
+            code: 'provider_not_configured'
+          }
+        });
+      }
+
+      console.log(`[${new Date().toISOString()}] OCR: ${model} -> ${providerName}, file: ${file.filename}`);
+
+      // Check if this is a Chutes provider
+      const isChutes = isChutesProvider(provider.baseUrl);
+      let response;
+
+      if (isChutes) {
+        // Chutes format for OCR: POST /ocr with image_b64
+        console.log(`[${new Date().toISOString()}] Using Chutes format for OCR`);
+
+        const image_b64 = audioBufferToBase64(file.data); // Same base64 conversion
+
+        const chutesRequest = {
+          image_b64: image_b64
         };
 
         response = await makeRequest(
-          `${provider.baseUrl}/chat/completions`,
+          `${provider.baseUrl}/ocr`,
           {
             method: 'POST',
             headers: {
@@ -975,17 +1601,35 @@ const server = http.createServer(async (req, res) => {
             },
             timeout: 120000
           },
-          providerRequest
+          chutesRequest
         );
 
-        console.log(`[${new Date().toISOString()}] ${providerName} response: ${response.status}`);
+        console.log(`[${new Date().toISOString()}] ${providerName} OCR response: ${response.status}`);
 
         if (response.status !== 200) {
           return sendJSON(res, response.status, response.data);
         }
 
-        const normalizedResponse = normalizeToOpenAIResponse(response.data, model);
-        return sendJSON(res, 200, normalizedResponse);
+        // Transform response to standard format
+        const text = typeof response.data === 'string' ? response.data :
+                     response.data.text || response.data.result || JSON.stringify(response.data);
+
+        return sendJSON(res, 200, {
+          text: text,
+          model: model,
+          provider: providerName
+        });
+
+      } else {
+        // Standard format: could be OpenAI Vision or other OCR API
+        // For now, return error suggesting to use vision endpoint
+        return sendJSON(res, 400, {
+          error: {
+            message: 'OCR is only supported for Chutes providers. For other providers, use /v1/chat/completions with vision models.',
+            type: 'invalid_request_error',
+            code: 'ocr_not_supported'
+          }
+        });
       }
     }
 
