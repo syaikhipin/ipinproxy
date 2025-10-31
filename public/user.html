@@ -594,24 +594,34 @@
       <div class="tab-content" id="docs-tab">
         <h2 class="section-title">API Documentation</h2>
 
-        <div class="docs-section">
+        <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+          <label style="display: block; font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">Select Model</label>
+          <select id="user-apidocs-model-select" onchange="generateDocumentation()" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+            <option value="">Choose a model...</option>
+          </select>
+        </div>
+
+        <div class="docs-section" id="user-apidocs-content">
           <div class="code-title">Base URL</div>
           <div class="code-block">
             <pre id="base-url-display">Loading...</pre>
           </div>
 
           <div class="code-title">cURL Example</div>
-          <div class="code-block">
+          <div class="code-block" style="position: relative;">
+            <button onclick="copyCode('curl-example')" style="position: absolute; top: 10px; right: 10px; padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; z-index: 10;">Copy</button>
             <pre id="curl-example">Loading...</pre>
           </div>
 
           <div class="code-title">Python Example</div>
-          <div class="code-block">
+          <div class="code-block" style="position: relative;">
+            <button onclick="copyCode('python-example')" style="position: absolute; top: 10px; right: 10px; padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; z-index: 10;">Copy</button>
             <pre id="python-example">Loading...</pre>
           </div>
 
           <div class="code-title">JavaScript Example</div>
-          <div class="code-block">
+          <div class="code-block" style="position: relative;">
+            <button onclick="copyCode('js-example')" style="position: absolute; top: 10px; right: 10px; padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; z-index: 10;">Copy</button>
             <pre id="js-example">Loading...</pre>
           </div>
         </div>

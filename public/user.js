@@ -84,6 +84,7 @@ async function loadModels() {
     const embeddingSelect = document.getElementById('embedding-model-select');
     const transcriptionSelect = document.getElementById('transcription-model-select');
     const ocrSelect = document.getElementById('ocr-model-select');
+    const apiDocsSelect = document.getElementById('user-apidocs-model-select');
 
     if (data.data && data.data.length > 0) {
       modelsList.innerHTML = data.data.map(model =>
@@ -94,6 +95,12 @@ async function loadModels() {
       modelSelect.innerHTML = data.data.map(model =>
         `<option value="${model.id}">${model.id}</option>`
       ).join('');
+
+      // API Docs model selector - all models
+      apiDocsSelect.innerHTML = '<option value="">Choose a model...</option>' +
+        data.data.map(model =>
+          `<option value="${model.id}">${model.id}</option>`
+        ).join('');
 
       // Embedding models - filter by name patterns
       const embeddingModels = data.data.filter(m =>
@@ -139,6 +146,7 @@ async function loadModels() {
       embeddingSelect.innerHTML = '<option value="">No models available</option>';
       transcriptionSelect.innerHTML = '<option value="">No models available</option>';
       ocrSelect.innerHTML = '<option value="">No models available</option>';
+      apiDocsSelect.innerHTML = '<option value="">No models available</option>';
     }
   } catch (error) {
     console.error('Error loading models:', error);
@@ -325,8 +333,17 @@ function generateDocumentation() {
   const baseUrl = window.location.origin;
   const apiKey = apiKeyData.key;
 
-  // Use first available model from the API, or a placeholder if none exist
-  const exampleModel = availableModels.length > 0 ? availableModels[0].id : 'your-model-id';
+  // Get selected model from dropdown, or use first available model, or placeholder
+  const selectedModel = document.getElementById('user-apidocs-model-select').value;
+  const exampleModel = selectedModel || (availableModels.length > 0 ? availableModels[0].id : 'your-model-id');
+
+  // Hide content if no model is selected
+  const contentDiv = document.getElementById('user-apidocs-content');
+  if (!selectedModel && availableModels.length > 0) {
+    contentDiv.style.display = 'none';
+    return;
+  }
+  contentDiv.style.display = 'block';
 
   // Base URL
   document.getElementById('base-url-display').textContent = `${baseUrl}/v1`;
@@ -394,6 +411,30 @@ const data = await response.json();
 console.log(data);`;
 
   document.getElementById('js-example').textContent = jsExample;
+}
+
+// Copy code to clipboard
+function copyCode(elementId) {
+  const codeElement = document.getElementById(elementId);
+  const code = codeElement.textContent;
+
+  navigator.clipboard.writeText(code).then(() => {
+    // Find the button that was clicked
+    const button = codeElement.parentElement.querySelector('button');
+    if (button) {
+      const originalText = button.textContent;
+      button.textContent = 'Copied!';
+      button.style.background = '#10b981';
+
+      setTimeout(() => {
+        button.textContent = originalText;
+        button.style.background = '#667eea';
+      }, 2000);
+    }
+  }).catch(err => {
+    console.error('Failed to copy code:', err);
+    alert('Failed to copy code to clipboard');
+  });
 }
 
 // Keyboard shortcuts
