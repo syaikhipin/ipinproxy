@@ -16,6 +16,41 @@ function logout() {
   window.location.href = '/login.html';
 }
 
+async function reloadDatabase() {
+  if (!confirm('Reload database from disk? This will refresh all providers and models without restarting the server.')) {
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/admin/reload', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${localStorage.getItem('admin_token')}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to reload database');
+    }
+
+    const data = await response.json();
+
+    // Show success message
+    alert(`✅ Database reloaded successfully!\n\nProviders: ${data.providers}\nModels: ${data.models}`);
+
+    // Reload all data in the UI
+    await loadProviders();
+    await loadModels();
+    await loadApiKeys();
+    await loadUsers();
+
+    console.log('Database and UI reloaded successfully');
+  } catch (error) {
+    alert(`❌ Error reloading database: ${error.message}`);
+    console.error('Error reloading database:', error);
+  }
+}
+
 // API calls
 async function apiCall(url, options = {}) {
   const token = localStorage.getItem('admin_token');
@@ -1106,12 +1141,7 @@ function updateAdminEmbeddingModelSelect() {
   const select = document.getElementById('admin-embedding-model-select');
   if (!select) return;
 
-  const embeddingModels = models.filter(m =>
-    m.enabled && (
-      m.id.toLowerCase().includes('embedding') ||
-      m.id.toLowerCase().includes('embed')
-    )
-  );
+  const embeddingModels = models.filter(m => m.enabled && m.type === 'embedding');
 
   if (embeddingModels.length > 0) {
     select.innerHTML = embeddingModels.map(m =>
@@ -1221,12 +1251,7 @@ function updateAdminTranscriptionModelSelect() {
   const select = document.getElementById('admin-transcription-model-select');
   if (!select) return;
 
-  const transcriptionModels = models.filter(m =>
-    m.enabled && (
-      m.id.toLowerCase().includes('whisper') ||
-      m.id.toLowerCase().includes('transcri')
-    )
-  );
+  const transcriptionModels = models.filter(m => m.enabled && m.type === 'transcription');
 
   if (transcriptionModels.length > 0) {
     select.innerHTML = transcriptionModels.map(m =>

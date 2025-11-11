@@ -1132,6 +1132,39 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    // POST /api/admin/reload - Reload providers and models from database
+    if (req.method === 'POST' && req.url === '/api/admin/reload') {
+      if (!authenticateAdmin(req)) {
+        return sendJSON(res, 401, { error: 'Unauthorized' });
+      }
+
+      try {
+        // Reload database
+        db.load();
+
+        // Reload providers and models from database
+        loadProvidersFromDB();
+        loadModelsFromDB();
+
+        console.log(`[${new Date().toISOString()}] Database reloaded by admin`);
+        console.log(`📦 Providers: ${Object.keys(PROVIDERS).length}`);
+        console.log(`🎯 Models: ${Object.keys(MODEL_ROUTES).length}`);
+
+        return sendJSON(res, 200, {
+          success: true,
+          message: 'Database reloaded successfully',
+          providers: Object.keys(PROVIDERS).length,
+          models: Object.keys(MODEL_ROUTES).length
+        });
+      } catch (error) {
+        console.error('Error reloading database:', error);
+        return sendJSON(res, 500, {
+          error: 'Failed to reload database',
+          message: error.message
+        });
+      }
+    }
+
     // POST /v1/chat/completions
     if (req.method === 'POST' && req.url === '/v1/chat/completions') {
       // Authenticate
@@ -1261,6 +1294,11 @@ const server = http.createServer(async (req, res) => {
 
       if (response.status !== 200) {
         return sendJSON(res, response.status, response.data);
+      }
+
+      // Debug: Log raw response for troubleshooting
+      if (providerName === 'google') {
+        console.log(`[${new Date().toISOString()}] Google raw response:`, JSON.stringify(response.data).substring(0, 500));
       }
 
       const normalizedResponse = normalizeToOpenAIResponse(response.data, model);
