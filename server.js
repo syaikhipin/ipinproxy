@@ -74,6 +74,7 @@ function loadModelsFromDB() {
   models.forEach(m => {
     MODEL_ROUTES[m.id] = {
       providerId: m.providerId,
+      type: m.type || 'chat',
       supportsImageUpload: m.supportsImageUpload || false,
       supportsVideoUpload: m.supportsVideoUpload || false
     };
@@ -1110,7 +1111,8 @@ const server = http.createServer(async (req, res) => {
         id: modelId,
         object: 'model',
         created: Date.now(),
-        owned_by: MODEL_ROUTES[modelId]?.providerId || 'unknown'
+        owned_by: MODEL_ROUTES[modelId]?.providerId || 'unknown',
+        type: MODEL_ROUTES[modelId]?.type || 'chat'
       }));
 
       return sendJSON(res, 200, {
@@ -1360,6 +1362,116 @@ const server = http.createServer(async (req, res) => {
       }
 
       // Return embeddings response (already in OpenAI format)
+      return sendJSON(res, 200, response.data);
+    }
+
+    // POST /v1/rerank
+    if (req.method === 'POST' && req.url === '/v1/rerank') {
+      // Authenticate
+      const apiKey = authenticate(req);
+      if (!apiKey) {
+        return sendJSON(res, 401, {
+          error: {
+            message: 'Invalid authentication credentials',
+            type: 'invalid_request_error',
+            code: 'invalid_api_key'
+          }
+        });
+      }
+
+      const body = await parseBody(req);
+      const { model, query, documents, top_n, return_documents, ...params } = body;
+
+      // Validate input
+      if (!query) {
+        return sendJSON(res, 400, {
+          error: {
+            message: 'Missing required parameter: query',
+            type: 'invalid_request_error',
+            code: 'missing_query'
+          }
+        });
+      }
+
+      if (!documents || !Array.isArray(documents) || documents.length === 0) {
+        return sendJSON(res, 400, {
+          error: {
+            message: 'Missing or invalid required parameter: documents (must be a non-empty array)',
+            type: 'invalid_request_error',
+            code: 'missing_documents'
+          }
+        });
+      }
+
+      // Check if model is supported
+      const modelConfig = MODEL_ROUTES[model];
+      if (!modelConfig) {
+        return sendJSON(res, 400, {
+          error: {
+            message: `Model '${model}' not supported. Available models: ${Object.keys(MODEL_ROUTES).join(', ')}`,
+            type: 'invalid_request_error',
+            code: 'model_not_found'
+          }
+        });
+      }
+
+      const providerName = modelConfig.providerId;
+
+      // Check if API key has permission to use this model
+      const allowedModels = apiKey.allowedModels || [];
+      if (allowedModels.length > 0 && !allowedModels.includes(model)) {
+        return sendJSON(res, 403, {
+          error: {
+            message: `Access denied. This API key does not have permission to use model '${model}'.`,
+            type: 'permission_error',
+            code: 'model_not_allowed'
+          }
+        });
+      }
+
+      const provider = PROVIDERS[providerName];
+      if (!provider || !provider.apiKey) {
+        return sendJSON(res, 500, {
+          error: {
+            message: `Provider '${providerName}' not configured. Missing API key.`,
+            type: 'server_error',
+            code: 'provider_not_configured'
+          }
+        });
+      }
+
+      console.log(`[${new Date().toISOString()}] Reranking: ${model} -> ${providerName} (${documents.length} docs)`);
+
+      // Build reranking request
+      const rerankRequest = {
+        model: model,
+        query: query,
+        documents: documents,
+        top_n: top_n,
+        return_documents: return_documents !== false,
+        ...params
+      };
+
+      const response = await makeRequest(
+        `${provider.baseUrl}/rerank`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${provider.apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 120000
+        },
+        rerankRequest
+      );
+
+      console.log(`[${new Date().toISOString()}] ${providerName} rerank response: ${response.status}`);
+
+      if (response.status !== 200) {
+        return sendJSON(res, response.status, response.data);
+      }
+
+      // Return reranking response
       return sendJSON(res, 200, response.data);
     }
 

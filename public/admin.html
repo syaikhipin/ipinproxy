@@ -654,6 +654,17 @@
           <select id="model-provider" required></select>
         </div>
         <div class="form-group">
+          <label>Model Type</label>
+          <select id="model-type" required>
+            <option value="chat">Chat (LLM/VLM)</option>
+            <option value="embedding">Embedding</option>
+            <option value="transcription">Audio Transcription</option>
+            <option value="reranking">Reranking</option>
+            <option value="ocr">OCR (Optical Character Recognition)</option>
+          </select>
+          <small style="color: #666; font-size: 12px;">Determines which API endpoint to use</small>
+        </div>
+        <div class="form-group">
           <label>
             <input type="checkbox" id="model-enabled" checked> Enabled
           </label>

@@ -422,6 +422,7 @@
         <div class="tab" onclick="switchTab('embeddings', event)">Embeddings</div>
         <div class="tab" onclick="switchTab('transcription', event)">Transcription</div>
         <div class="tab" onclick="switchTab('ocr', event)">OCR</div>
+        <div class="tab" onclick="switchTab('reranking', event)">Reranking</div>
         <div class="tab" onclick="switchTab('docs', event)">API Documentation</div>
       </div>
 
@@ -585,6 +586,43 @@
             <h3 style="font-size: 16px; margin-bottom: 10px; color: #333;">Extracted Text:</h3>
             <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
               <pre id="ocr-result-text" style="white-space: pre-wrap; word-wrap: break-word; font-family: inherit; margin: 0;"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reranking Tab -->
+      <div class="tab-content" id="reranking-tab">
+        <h2 class="section-title">Test Reranking API</h2>
+
+        <div class="chat-section">
+          <div class="model-selector">
+            <label>Select Reranking Model</label>
+            <select id="reranking-model-select">
+              <option value="">Loading models...</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; margin-bottom: 8px; color: #333; font-weight: 500;">Query</label>
+            <input type="text" id="reranking-query" placeholder="e.g., Apple" style="padding: 10px; border: 1px solid #ddd; border-radius: 6px; width: 100%;">
+            <p style="font-size: 12px; color: #666; margin-top: 8px;">Enter the search query</p>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; margin-bottom: 8px; color: #333; font-weight: 500;">Documents (one per line)</label>
+            <textarea id="reranking-documents" placeholder="apple&#10;banana&#10;fruit&#10;vegetable" style="padding: 10px; border: 1px solid #ddd; border-radius: 6px; width: 100%; min-height: 120px; font-family: inherit;"></textarea>
+            <p style="font-size: 12px; color: #666; margin-top: 8px;">Enter documents to rerank, one per line</p>
+          </div>
+
+          <button class="send-btn" onclick="performReranking()" id="reranking-btn" style="margin-bottom: 15px;">Rerank Documents</button>
+
+          <div class="status" id="reranking-status"></div>
+
+          <div id="reranking-result" style="display: none; margin-top: 20px;">
+            <h3 style="font-size: 16px; margin-bottom: 10px; color: #333;">Reranking Results:</h3>
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #ddd;">
+              <div id="reranking-result-list"></div>
             </div>
           </div>
         </div>

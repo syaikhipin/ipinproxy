@@ -102,11 +102,8 @@ async function loadModels() {
           `<option value="${model.id}">${model.id}</option>`
         ).join('');
 
-      // Embedding models - filter by name patterns
-      const embeddingModels = data.data.filter(m =>
-        m.id.toLowerCase().includes('embedding') ||
-        m.id.toLowerCase().includes('embed')
-      );
+      // Embedding models - filter by type
+      const embeddingModels = data.data.filter(m => m.type === 'embedding');
       if (embeddingModels.length > 0) {
         embeddingSelect.innerHTML = embeddingModels.map(model =>
           `<option value="${model.id}">${model.id}</option>`
@@ -115,11 +112,8 @@ async function loadModels() {
         embeddingSelect.innerHTML = '<option value="">No embedding models available</option>';
       }
 
-      // Transcription models - filter by name patterns
-      const transcriptionModels = data.data.filter(m =>
-        m.id.toLowerCase().includes('whisper') ||
-        m.id.toLowerCase().includes('transcri')
-      );
+      // Transcription models - filter by type
+      const transcriptionModels = data.data.filter(m => m.type === 'transcription');
       if (transcriptionModels.length > 0) {
         transcriptionSelect.innerHTML = transcriptionModels.map(model =>
           `<option value="${model.id}">${model.id}</option>`
@@ -128,17 +122,27 @@ async function loadModels() {
         transcriptionSelect.innerHTML = '<option value="">No transcription models available</option>';
       }
 
-      // OCR models - filter by name patterns
-      const ocrModels = data.data.filter(m =>
-        m.id.toLowerCase().includes('ocr') ||
-        m.id.toLowerCase().includes('dots')
-      );
+      // OCR models - filter by type
+      const ocrModels = data.data.filter(m => m.type === 'ocr');
       if (ocrModels.length > 0) {
         ocrSelect.innerHTML = ocrModels.map(model =>
           `<option value="${model.id}">${model.id}</option>`
         ).join('');
       } else {
         ocrSelect.innerHTML = '<option value="">No OCR models available</option>';
+      }
+
+      // Reranking models - filter by type
+      const rerankingSelect = document.getElementById('reranking-model-select');
+      if (rerankingSelect) {
+        const rerankingModels = data.data.filter(m => m.type === 'reranking');
+        if (rerankingModels.length > 0) {
+          rerankingSelect.innerHTML = rerankingModels.map(model =>
+            `<option value="${model.id}">${model.id}</option>`
+          ).join('');
+        } else {
+          rerankingSelect.innerHTML = '<option value="">No reranking models available</option>';
+        }
       }
     } else {
       modelsList.innerHTML = '<div class="no-models">No models available</div>';
@@ -333,13 +337,15 @@ function generateDocumentation() {
   const baseUrl = window.location.origin;
   const apiKey = apiKeyData.key;
 
-  // Get selected model from dropdown, or use first available model, or placeholder
-  const selectedModel = document.getElementById('user-apidocs-model-select').value;
-  const exampleModel = selectedModel || (availableModels.length > 0 ? availableModels[0].id : 'your-model-id');
+  // Get selected model from dropdown
+  const selectedModelId = document.getElementById('user-apidocs-model-select').value;
+  const selectedModelObj = availableModels.find(m => m.id === selectedModelId);
+  const exampleModel = selectedModelId || (availableModels.length > 0 ? availableModels[0].id : 'your-model-id');
+  const modelType = selectedModelObj?.type || 'chat';
 
   // Hide content if no model is selected
   const contentDiv = document.getElementById('user-apidocs-content');
-  if (!selectedModel && availableModels.length > 0) {
+  if (!selectedModelId && availableModels.length > 0) {
     contentDiv.style.display = 'none';
     return;
   }
@@ -348,8 +354,133 @@ function generateDocumentation() {
   // Base URL
   document.getElementById('base-url-display').textContent = `${baseUrl}/v1`;
 
-  // cURL Example
-  const curlExample = `curl ${baseUrl}/v1/chat/completions \\
+  // Generate examples based on model type
+  let curlExample, pythonExample, jsExample;
+
+  if (modelType === 'embedding') {
+    // Embedding examples
+    curlExample = `curl ${baseUrl}/v1/embeddings \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${apiKey}" \\
+  -d '{
+    "model": "${exampleModel}",
+    "input": "Your text here"
+  }'`;
+
+    pythonExample = `import requests
+
+url = "${baseUrl}/v1/embeddings"
+headers = {
+    "Authorization": "Bearer ${apiKey}",
+    "Content-Type": "application/json"
+}
+data = {
+    "model": "${exampleModel}",
+    "input": "Your text here"
+}
+
+response = requests.post(url, headers=headers, json=data)
+print(response.json())`;
+
+    jsExample = `const response = await fetch('${baseUrl}/v1/embeddings', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer ${apiKey}',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    model: '${exampleModel}',
+    input: 'Your text here'
+  })
+});
+
+const data = await response.json();
+console.log(data);`;
+
+  } else if (modelType === 'transcription') {
+    // Transcription examples
+    curlExample = `curl ${baseUrl}/v1/audio/transcriptions \\
+  -H "Authorization: Bearer ${apiKey}" \\
+  -F model="${exampleModel}" \\
+  -F file="@audio.mp3"`;
+
+    pythonExample = `import requests
+
+url = "${baseUrl}/v1/audio/transcriptions"
+headers = {
+    "Authorization": "Bearer ${apiKey}"
+}
+files = {
+    "file": open("audio.mp3", "rb")
+}
+data = {
+    "model": "${exampleModel}"
+}
+
+response = requests.post(url, headers=headers, files=files, data=data)
+print(response.json())`;
+
+    jsExample = `const formData = new FormData();
+formData.append('file', audioFile);
+formData.append('model', '${exampleModel}');
+
+const response = await fetch('${baseUrl}/v1/audio/transcriptions', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer ${apiKey}'
+  },
+  body: formData
+});
+
+const data = await response.json();
+console.log(data);`;
+
+  } else if (modelType === 'reranking') {
+    // Reranking examples
+    curlExample = `curl ${baseUrl}/v1/rerank \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${apiKey}" \\
+  -d '{
+    "model": "${exampleModel}",
+    "query": "Apple",
+    "documents": ["apple", "banana", "fruit", "vegetable"]
+  }'`;
+
+    pythonExample = `import requests
+
+url = "${baseUrl}/v1/rerank"
+headers = {
+    "Authorization": "Bearer ${apiKey}",
+    "Content-Type": "application/json"
+}
+data = {
+    "model": "${exampleModel}",
+    "query": "Apple",
+    "documents": ["apple", "banana", "fruit", "vegetable"]
+}
+
+response = requests.post(url, headers=headers, json=data)
+print(response.json())`;
+
+    jsExample = `const response = await fetch('${baseUrl}/v1/rerank', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer ${apiKey}',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    model: '${exampleModel}',
+    query: 'Apple',
+    documents: ['apple', 'banana', 'fruit', 'vegetable']
+  })
+});
+
+const data = await response.json();
+console.log(data);`;
+
+  } else {
+    // Chat (default) examples
+    curlExample = `curl ${baseUrl}/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer ${apiKey}" \\
   -d '{
@@ -359,10 +490,7 @@ function generateDocumentation() {
     ]
   }'`;
 
-  document.getElementById('curl-example').textContent = curlExample;
-
-  // Python Example
-  const pythonExample = `import requests
+    pythonExample = `import requests
 
 url = "${baseUrl}/v1/chat/completions"
 headers = {
@@ -390,10 +518,7 @@ print(response.json())
 #     messages=[{"role": "user", "content": "Hello!"}]
 # )`;
 
-  document.getElementById('python-example').textContent = pythonExample;
-
-  // JavaScript Example
-  const jsExample = `const response = await fetch('${baseUrl}/v1/chat/completions', {
+    jsExample = `const response = await fetch('${baseUrl}/v1/chat/completions', {
   method: 'POST',
   headers: {
     'Authorization': 'Bearer ${apiKey}',
@@ -409,7 +534,10 @@ print(response.json())
 
 const data = await response.json();
 console.log(data);`;
+  }
 
+  document.getElementById('curl-example').textContent = curlExample;
+  document.getElementById('python-example').textContent = pythonExample;
   document.getElementById('js-example').textContent = jsExample;
 }
 
@@ -690,5 +818,99 @@ async function performOCR() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Extract Text';
+  }
+}
+
+// ============================================
+// RERANKING FUNCTIONS
+// ============================================
+
+async function performReranking() {
+  const model = document.getElementById('reranking-model-select').value;
+  const query = document.getElementById('reranking-query').value.trim();
+  const documentsText = document.getElementById('reranking-documents').value.trim();
+  const btn = document.getElementById('reranking-btn');
+  const status = document.getElementById('reranking-status');
+  const result = document.getElementById('reranking-result');
+
+  if (!model) {
+    status.className = 'status error';
+    status.textContent = 'Please select a reranking model';
+    return;
+  }
+
+  if (!query) {
+    status.className = 'status error';
+    status.textContent = 'Please enter a query';
+    return;
+  }
+
+  if (!documentsText) {
+    status.className = 'status error';
+    status.textContent = 'Please enter documents to rerank (one per line)';
+    return;
+  }
+
+  // Parse documents (one per line)
+  const documents = documentsText.split('\n').map(d => d.trim()).filter(d => d.length > 0);
+
+  if (documents.length < 2) {
+    status.className = 'status error';
+    status.textContent = 'Please enter at least 2 documents to rerank';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Reranking...';
+  status.style.display = 'none';
+  result.style.display = 'none';
+
+  try {
+    const response = await fetch('/v1/rerank', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKeyData.key}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: model,
+        query: query,
+        documents: documents
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || 'Failed to perform reranking');
+    }
+
+    const data = await response.json();
+
+    if (!data.results || !Array.isArray(data.results)) {
+      throw new Error('Invalid response format');
+    }
+
+    // Display results
+    const resultList = document.getElementById('reranking-result-list');
+    resultList.innerHTML = data.results.map((item, idx) => `
+      <div style="margin-bottom: 12px; padding: 12px; background: white; border-radius: 6px; border-left: 4px solid #667eea;">
+        <div style="font-weight: 600; margin-bottom: 4px;">
+          #${idx + 1} - Score: ${item.relevance_score.toFixed(4)}
+        </div>
+        <div style="color: #666;">
+          ${escapeHtml(item.document || documents[item.index])}
+        </div>
+      </div>
+    `).join('');
+
+    result.style.display = 'block';
+    status.className = 'status success';
+    status.textContent = `✓ Reranked ${data.results.length} documents successfully!`;
+  } catch (error) {
+    status.className = 'status error';
+    status.textContent = `✗ Error: ${error.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Rerank Documents';
   }
 }

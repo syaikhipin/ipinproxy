@@ -156,6 +156,7 @@ class Database {
       id: model.id,
       name: model.name,
       providerId: model.providerId,
+      type: model.type || 'chat', // chat, embedding, transcription, reranking
       enabled: model.enabled !== false,
       supportsImageUpload: model.supportsImageUpload || false,
       supportsVideoUpload: model.supportsVideoUpload || false
