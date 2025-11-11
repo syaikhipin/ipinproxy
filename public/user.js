@@ -784,16 +784,44 @@ async function performOCR() {
   result.style.display = 'none';
 
   try {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('model', model);
+    // Convert image to base64
+    const reader = new FileReader();
+    const base64Promise = new Promise((resolve, reject) => {
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
 
-    const response = await fetch('/v1/ocr', {
+    const base64Image = await base64Promise;
+
+    // Use chat completions API with vision
+    const response = await fetch('/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKeyData.key}`
+        'Authorization': `Bearer ${apiKeyData.key}`,
+        'Content-Type': 'application/json'
       },
-      body: formData
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Extract all text from this image. Return only the extracted text without any additional explanation.'
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: base64Image
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 2000
+      })
     });
 
     if (!response.ok) {
@@ -803,12 +831,14 @@ async function performOCR() {
 
     const data = await response.json();
 
-    if (!data.text) {
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
       throw new Error('Invalid response format');
     }
 
+    const extractedText = data.choices[0].message.content;
+
     // Display result
-    document.getElementById('ocr-result-text').textContent = data.text;
+    document.getElementById('ocr-result-text').textContent = extractedText;
     result.style.display = 'block';
     status.className = 'status success';
     status.textContent = `✓ Text extracted successfully!`;

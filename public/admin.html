@@ -295,6 +295,7 @@
       <button class="tab" onclick="switchTab('embeddings', event)">🔤 Embeddings</button>
       <button class="tab" onclick="switchTab('transcription', event)">🎙️ Transcribe</button>
       <button class="tab" onclick="switchTab('ocr', event)">📄 OCR</button>
+      <button class="tab" onclick="switchTab('reranking', event)">🔀 Reranking</button>
       <button class="tab" onclick="switchTab('apidocs', event)">📚 API Docs</button>
     </div>
 
@@ -520,6 +521,52 @@
           <div id="admin-ocr-result" style="display: none; margin-top: 20px; background: white; padding: 20px; border-radius: 8px; border: 1px solid #ddd;">
             <h3 style="font-size: 16px; margin-bottom: 15px; color: #374151;">Extracted Text:</h3>
             <pre id="admin-ocr-result-text" style="white-space: pre-wrap; word-wrap: break-word; font-family: inherit; margin: 0; line-height: 1.6;"></pre>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reranking Tab -->
+      <div id="reranking-tab" class="tab-content">
+        <h2 style="font-size: 24px; margin-bottom: 20px; color: #374151;">🔀 Test Reranking API</h2>
+
+        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">Select Reranking Model</label>
+            <select id="admin-reranking-model-select" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+              <option value="">Loading models...</option>
+            </select>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">Query</label>
+            <input type="text" id="admin-reranking-query" placeholder="e.g., What is the capital of France?" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+            <p style="font-size: 12px; color: #999; margin-top: 8px;">Enter the search query to rank documents against</p>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">Documents (one per line)</label>
+            <textarea id="admin-reranking-documents" rows="6" placeholder="Paris is the capital of France&#10;Berlin is the capital of Germany&#10;Madrid is the capital of Spain&#10;London is the capital of England" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-family: inherit; font-size: 14px; resize: vertical;"></textarea>
+            <p style="font-size: 12px; color: #999; margin-top: 8px;">Enter documents to rank, one per line</p>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 14px; font-weight: 600; color: #666; margin-bottom: 8px;">Top N Results (optional)</label>
+            <input type="number" id="admin-reranking-topn" placeholder="e.g., 3" min="1" style="width: 150px; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+            <p style="font-size: 12px; color: #999; margin-top: 8px;">Leave empty to return all documents</p>
+          </div>
+
+          <button class="btn btn-success" onclick="adminPerformReranking()" id="admin-reranking-btn">Rerank Documents</button>
+
+          <div id="admin-reranking-status" style="display: none; padding: 10px; margin-top: 15px; border-radius: 6px; font-size: 13px;"></div>
+
+          <div id="admin-reranking-result" style="display: none; margin-top: 20px; background: white; padding: 20px; border-radius: 8px; border: 1px solid #ddd;">
+            <h3 style="font-size: 16px; margin-bottom: 15px; color: #374151;">Reranking Results:</h3>
+            <div id="admin-reranking-result-list" style="font-size: 14px;"></div>
+          </div>
+
+          <div id="admin-reranking-raw" style="display: none; margin-top: 20px;">
+            <h3 style="font-size: 16px; margin-bottom: 10px; color: #374151;">Raw API Response:</h3>
+            <pre id="admin-reranking-raw-json" style="background: #1e293b; color: #e2e8f0; padding: 15px; border-radius: 8px; overflow-x: auto; font-size: 12px; line-height: 1.6;"></pre>
           </div>
         </div>
       </div>

@@ -162,6 +162,7 @@ async function loadModels() {
     updateAdminEmbeddingModelSelect();
     updateAdminTranscriptionModelSelect();
     updateAdminOCRModelSelect();
+    updateAdminRerankingModelSelect();
   } catch (error) {
     console.error('Error loading models:', error);
   }
@@ -1345,12 +1346,7 @@ function updateAdminOCRModelSelect() {
   const select = document.getElementById('admin-ocr-model-select');
   if (!select) return;
 
-  const ocrModels = models.filter(m =>
-    m.enabled && (
-      m.id.toLowerCase().includes('ocr') ||
-      m.id.toLowerCase().includes('dots')
-    )
-  );
+  const ocrModels = models.filter(m => m.enabled && m.type === 'ocr');
 
   if (ocrModels.length > 0) {
     select.innerHTML = ocrModels.map(m =>
@@ -1433,16 +1429,44 @@ async function adminPerformOCR() {
   result.style.display = 'none';
 
   try {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('model', model);
+    // Convert image to base64
+    const reader = new FileReader();
+    const base64Promise = new Promise((resolve, reject) => {
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
 
-    const response = await fetch('/v1/ocr', {
+    const base64Image = await base64Promise;
+
+    // Use chat completions API with vision
+    const response = await fetch('/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${testApiKey.key}`
+        'Authorization': `Bearer ${testApiKey.key}`,
+        'Content-Type': 'application/json'
       },
-      body: formData
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'Extract all text from this image. Return only the extracted text without any additional explanation.'
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: base64Image
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 2000
+      })
     });
 
     if (!response.ok) {
@@ -1452,12 +1476,14 @@ async function adminPerformOCR() {
 
     const data = await response.json();
 
-    if (!data.text) {
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
       throw new Error('Invalid response format');
     }
 
+    const extractedText = data.choices[0].message.content;
+
     // Display result
-    document.getElementById('admin-ocr-result-text').textContent = data.text;
+    document.getElementById('admin-ocr-result-text').textContent = extractedText;
     result.style.display = 'block';
     status.style.display = 'block';
     status.style.background = '#d1fae5';
@@ -1473,5 +1499,150 @@ async function adminPerformOCR() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Extract Text';
+  }
+}
+
+// ============================================
+// Admin - Reranking Test
+// ============================================
+
+function updateAdminRerankingModelSelect() {
+  const select = document.getElementById('admin-reranking-model-select');
+  if (!select) return;
+
+  const rerankingModels = models.filter(m => m.enabled && m.type === 'reranking');
+
+  if (rerankingModels.length > 0) {
+    select.innerHTML = rerankingModels.map(m =>
+      `<option value="${m.id}">${m.name} (${m.id})</option>`
+    ).join('');
+  } else {
+    select.innerHTML = '<option value="">No reranking models available</option>';
+  }
+}
+
+async function adminPerformReranking() {
+  const model = document.getElementById('admin-reranking-model-select').value;
+  const query = document.getElementById('admin-reranking-query').value.trim();
+  const documentsText = document.getElementById('admin-reranking-documents').value.trim();
+  const topN = document.getElementById('admin-reranking-topn').value;
+  const btn = document.getElementById('admin-reranking-btn');
+  const status = document.getElementById('admin-reranking-status');
+  const result = document.getElementById('admin-reranking-result');
+  const raw = document.getElementById('admin-reranking-raw');
+
+  // Validation
+  if (!model) {
+    alert('Please select a reranking model');
+    return;
+  }
+
+  if (!query) {
+    alert('Please enter a query');
+    return;
+  }
+
+  if (!documentsText) {
+    alert('Please enter documents to rank');
+    return;
+  }
+
+  // Parse documents (one per line)
+  const documents = documentsText.split('\n').map(d => d.trim()).filter(d => d.length > 0);
+
+  if (documents.length === 0) {
+    alert('Please enter at least one document');
+    return;
+  }
+
+  // Get first enabled API key for testing
+  const testApiKey = apiKeys.find(k => k.enabled);
+  if (!testApiKey) {
+    status.style.display = 'block';
+    status.style.background = '#fee2e2';
+    status.style.color = '#991b1b';
+    status.style.border = '1px solid #fecaca';
+    status.textContent = '✗ No enabled API key found. Please enable at least one API key in the API Keys tab.';
+    return;
+  }
+
+  // Show loading state
+  btn.disabled = true;
+  btn.textContent = 'Reranking...';
+  status.style.display = 'block';
+  status.style.background = '#dbeafe';
+  status.style.color = '#1e40af';
+  status.style.border = '1px solid #93c5fd';
+  status.textContent = '⏳ Reranking documents...';
+  result.style.display = 'none';
+  raw.style.display = 'none';
+
+  try {
+    const requestBody = {
+      model: model,
+      query: query,
+      documents: documents
+    };
+
+    if (topN && parseInt(topN) > 0) {
+      requestBody.top_n = parseInt(topN);
+    }
+
+    const response = await fetch('/v1/rerank', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${testApiKey.key}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || 'Failed to rerank documents');
+    }
+
+    const data = await response.json();
+
+    if (!data.results || !Array.isArray(data.results)) {
+      throw new Error('Invalid response format');
+    }
+
+    // Display results
+    const resultList = document.getElementById('admin-reranking-result-list');
+    resultList.innerHTML = data.results.map((item, idx) => {
+      const doc = item.document || documents[item.index] || 'Unknown';
+      const score = item.relevance_score.toFixed(4);
+      return `
+        <div style="padding: 12px; margin-bottom: 10px; background: #f9fafb; border-left: 3px solid #667eea; border-radius: 4px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+            <strong style="color: #667eea;">#${idx + 1}</strong>
+            <span style="background: #667eea; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">Score: ${score}</span>
+          </div>
+          <div style="color: #374151;">${escapeHtml(doc)}</div>
+        </div>
+      `;
+    }).join('');
+
+    result.style.display = 'block';
+
+    // Show raw response
+    document.getElementById('admin-reranking-raw-json').textContent = JSON.stringify(data, null, 2);
+    raw.style.display = 'block';
+
+    status.style.display = 'block';
+    status.style.background = '#d1fae5';
+    status.style.color = '#065f46';
+    status.style.border = '1px solid #6ee7b7';
+    status.textContent = `✓ Ranked ${data.results.length} documents successfully!`;
+  } catch (error) {
+    status.style.display = 'block';
+    status.style.background = '#fee2e2';
+    status.style.color = '#991b1b';
+    status.style.border = '1px solid #fecaca';
+    status.textContent = `✗ Error: ${error.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Rerank Documents';
   }
 }
