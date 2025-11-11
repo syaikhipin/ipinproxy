@@ -712,7 +712,7 @@ async function sendChatMessage() {
 
   // Check if model supports vision when image is attached
   if (currentImage && !supportsVision(model)) {
-    showChatStatus('error', 'This model does not support image inputs. Please select a vision-capable model (Claude, GPT-4 Vision, Gemini, or Qwen-VL)');
+    showChatStatus('error', 'This model does not support image inputs. Please select a vision-capable model (one with 📷 icon)');
     return;
   }
 
