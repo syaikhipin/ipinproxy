@@ -1132,39 +1132,6 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    // POST /api/admin/reload - Reload providers and models from database
-    if (req.method === 'POST' && req.url === '/api/admin/reload') {
-      if (!authenticateAdmin(req)) {
-        return sendJSON(res, 401, { error: 'Unauthorized' });
-      }
-
-      try {
-        // Reload database
-        db.load();
-
-        // Reload providers and models from database
-        loadProvidersFromDB();
-        loadModelsFromDB();
-
-        console.log(`[${new Date().toISOString()}] Database reloaded by admin`);
-        console.log(`📦 Providers: ${Object.keys(PROVIDERS).length}`);
-        console.log(`🎯 Models: ${Object.keys(MODEL_ROUTES).length}`);
-
-        return sendJSON(res, 200, {
-          success: true,
-          message: 'Database reloaded successfully',
-          providers: Object.keys(PROVIDERS).length,
-          models: Object.keys(MODEL_ROUTES).length
-        });
-      } catch (error) {
-        console.error('Error reloading database:', error);
-        return sendJSON(res, 500, {
-          error: 'Failed to reload database',
-          message: error.message
-        });
-      }
-    }
-
     // POST /v1/chat/completions
     if (req.method === 'POST' && req.url === '/v1/chat/completions') {
       // Authenticate
@@ -1823,14 +1790,60 @@ const server = http.createServer(async (req, res) => {
         });
 
       } else {
-        // Standard format: could be OpenAI Vision or other OCR API
-        // For now, return error suggesting to use vision endpoint
-        return sendJSON(res, 400, {
-          error: {
-            message: 'OCR is only supported for Chutes providers. For other providers, use /v1/chat/completions with vision models.',
-            type: 'invalid_request_error',
-            code: 'ocr_not_supported'
-          }
+        // Use Vision API for OCR (for SiliconFlow and other OpenAI-compatible providers)
+        console.log(`[${new Date().toISOString()}] Using Vision API for OCR`);
+
+        const image_b64 = audioBufferToBase64(file.data);
+        const mimeType = file.contentType || 'image/png';
+
+        const visionRequest = {
+          model: model,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: 'Extract all text from this image. Return only the extracted text without any additional commentary or formatting.'
+                },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:${mimeType};base64,${image_b64}`
+                  }
+                }
+              ]
+            }
+          ],
+          max_tokens: 4000
+        };
+
+        response = await makeRequest(
+          `${provider.baseUrl}/chat/completions`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${provider.apiKey}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 120000
+          },
+          visionRequest
+        );
+
+        console.log(`[${new Date().toISOString()}] ${providerName} Vision OCR response: ${response.status}`);
+
+        if (response.status !== 200) {
+          return sendJSON(res, response.status, response.data);
+        }
+
+        // Extract text from vision response
+        const text = response.data?.choices?.[0]?.message?.content || '';
+
+        return sendJSON(res, 200, {
+          text: text.trim(),
+          model: model,
+          provider: providerName
         });
       }
     }
