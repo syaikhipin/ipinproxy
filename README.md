@@ -78,6 +78,10 @@ MASTER_API_KEY=sk-your-secret-key
 # Admin UI Credentials
 UI_USERNAME=admin
 UI_PASSWORD=your-password
+
+# Optional: Comma-separated fallback directories for ipin-proxy.db
+# Used when project root is read-only. Falls back to /tmp if none work.
+DB_STORAGE_PATHS=/data/db,/mnt/volume
 ```
 
 ## Admin UI
@@ -719,11 +723,11 @@ Render's free tier is perfect for this lightweight proxy!
 - Spins down after 15 minutes of inactivity
 - First request after spin-down takes ~30 seconds
 - Memory limit: 512MB (this app uses ~5-10MB)
-- **Database persistence:** Free tier has read-only filesystem, so the app automatically uses `/tmp` for database storage
-  - **Data will reset on each restart/redeploy**
-  - **Optional:** Upload your database to "Secret Files" as `ipin-proxy.db` - it will be copied to `/tmp` on startup
-  - You'll need to reconfigure providers/models via Admin UI after each restart
-  - **For persistent storage**, upgrade to a paid plan with Disk support
+- **Database persistence:** Free tier has read-only filesystem. Set `DB_STORAGE_PATHS` (comma-separated) to point at your mounted volumes; otherwise the app falls back to `/tmp`.
+  - **Data will reset on each restart/redeploy** when `/tmp` is used
+  - **Optional:** Upload your database to "Secret Files" as `ipin-proxy.db` - it will be copied to the first writable path (default `/tmp`) on startup
+  - You'll need to reconfigure providers/models via Admin UI after each restart if using ephemeral storage
+  - **For persistent storage**, upgrade to a paid plan with Disk support or mount a persistent volume and include it in `DB_STORAGE_PATHS`
 
 **Keep Your App Alive (Avoid Cold Starts):**
 

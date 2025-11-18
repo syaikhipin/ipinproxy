@@ -13,20 +13,56 @@ class Database {
 
   // Find a writable location for the database
   getWritablePath(filepath) {
-    // Try to write to the original path first
-    try {
-      const testPath = filepath + '.test';
-      fs.writeFileSync(testPath, 'test', 'utf8');
-      fs.unlinkSync(testPath);
-      console.log(`✅ Using database path: ${filepath}`);
-      return filepath;
-    } catch (error) {
-      // If original path is not writable, use /tmp
-      const tmpPath = path.join('/tmp', path.basename(filepath));
-      console.log(`⚠️  Original path not writable, using: ${tmpPath}`);
-      console.log('💡 Note: Data will reset on restart. Configure via Admin UI after each deployment.');
-      return tmpPath;
+    const baseName = path.basename(filepath);
+    const candidates = [filepath];
+    const fallbackDirs = this.getFallbackDirectories();
+
+    fallbackDirs.forEach(dir => {
+      const target = path.join(dir, baseName);
+      if (!candidates.includes(target)) {
+        candidates.push(target);
+      }
+    });
+
+    for (const candidate of candidates) {
+      try {
+        const dir = path.dirname(candidate);
+        fs.mkdirSync(dir, { recursive: true });
+        const testPath = candidate + '.test';
+        fs.writeFileSync(testPath, 'test', 'utf8');
+        fs.unlinkSync(testPath);
+
+        if (candidate === filepath) {
+          console.log(`✅ Using database path: ${candidate}`);
+        } else {
+          console.log(`⚠️  Original path not writable, using fallback: ${candidate}`);
+          if (candidate.startsWith('/tmp')) {
+            console.log('💡 Note: Data will reset on restart. Configure via Admin UI after each deployment.');
+          } else {
+            console.log('💡 Set DB_STORAGE_PATHS to control fallback paths. Data persists if the mount is persistent.');
+          }
+        }
+        return candidate;
+      } catch (error) {
+        console.warn(`⚠️  Unable to use database path ${candidate}: ${error.message}`);
+      }
     }
+
+    throw new Error('❌ No writable location found for database file. Check DB_STORAGE_PATHS or permissions.');
+  }
+
+  getFallbackDirectories() {
+    const envValue = process.env.DB_STORAGE_PATHS || '';
+    const fallbackDirs = envValue
+      .split(',')
+      .map(dir => dir.trim())
+      .filter(Boolean);
+
+    if (!fallbackDirs.includes('/tmp')) {
+      fallbackDirs.push('/tmp');
+    }
+
+    return fallbackDirs;
   }
 
   load() {
