@@ -144,6 +144,19 @@ async function loadModels() {
           rerankingSelect.innerHTML = '<option value="">No reranking models available</option>';
         }
       }
+
+      // Image generation models - filter by type
+      const imagegenSelect = document.getElementById('imagegen-model-select');
+      if (imagegenSelect) {
+        const imagegenModels = data.data.filter(m => m.type === 'image');
+        if (imagegenModels.length > 0) {
+          imagegenSelect.innerHTML = imagegenModels.map(model =>
+            `<option value="${model.id}">${model.id}</option>`
+          ).join('');
+        } else {
+          imagegenSelect.innerHTML = '<option value="">No image generation models available</option>';
+        }
+      }
     } else {
       modelsList.innerHTML = '<div class="no-models">No models available</div>';
       modelSelect.innerHTML = '<option value="">No models available</option>';
@@ -942,5 +955,92 @@ async function performReranking() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Rerank Documents';
+  }
+}
+
+// Image Generation
+async function generateImage() {
+  const model = document.getElementById('imagegen-model-select').value;
+  const prompt = document.getElementById('imagegen-prompt').value.trim();
+  const n = document.getElementById('imagegen-n').value;
+  const size = document.getElementById('imagegen-size').value;
+  const quality = document.getElementById('imagegen-quality').value;
+  const btn = document.getElementById('imagegen-btn');
+  const status = document.getElementById('imagegen-status');
+  const resultDiv = document.getElementById('imagegen-result');
+  const imagesDiv = document.getElementById('imagegen-images');
+
+  if (!model) {
+    status.className = 'status error';
+    status.textContent = 'Please select an image generation model';
+    return;
+  }
+
+  if (!prompt) {
+    status.className = 'status error';
+    status.textContent = 'Please enter a prompt';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+  status.style.display = 'none';
+  resultDiv.style.display = 'none';
+
+  try {
+    const requestBody = {
+      model: model,
+      prompt: prompt,
+      n: parseInt(n) || 1,
+      size: size
+    };
+
+    if (quality) {
+      requestBody.quality = quality;
+    }
+
+    const response = await fetch('/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKeyData.key}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || 'Failed to generate image');
+    }
+
+    const data = await response.json();
+
+    if (!data.data || !Array.isArray(data.data)) {
+      throw new Error('Invalid response format');
+    }
+
+    // Display images
+    imagesDiv.innerHTML = data.data.map((item, idx) => {
+      const imageUrl = item.url || item.b64_json;
+      const imgSrc = item.b64_json ? `data:image/png;base64,${item.b64_json}` : imageUrl;
+      return `
+        <div style="border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: white;">
+          <img src="${imgSrc}" alt="Generated image ${idx + 1}" style="width: 100%; height: auto; display: block;">
+          <div style="padding: 10px; text-align: center;">
+            <a href="${imgSrc}" target="_blank" class="send-btn" style="display: inline-block; font-size: 12px; padding: 8px 12px; text-decoration: none;">Open Image</a>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    resultDiv.style.display = 'block';
+    status.className = 'status success';
+    status.textContent = `✓ Generated ${data.data.length} image(s) successfully!`;
+  } catch (error) {
+    status.className = 'status error';
+    status.textContent = `✗ Error: ${error.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate Image';
   }
 }

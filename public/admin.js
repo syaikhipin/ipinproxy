@@ -163,6 +163,7 @@ async function loadModels() {
     updateAdminTranscriptionModelSelect();
     updateAdminOCRModelSelect();
     updateAdminRerankingModelSelect();
+    updateAdminImageGenModelSelect();
   } catch (error) {
     console.error('Error loading models:', error);
   }
@@ -1511,6 +1512,21 @@ function updateAdminRerankingModelSelect() {
   }
 }
 
+function updateAdminImageGenModelSelect() {
+  const select = document.getElementById('admin-imagegen-model-select');
+  if (!select) return;
+
+  const imageGenModels = models.filter(m => m.enabled && m.type === 'image');
+
+  if (imageGenModels.length > 0) {
+    select.innerHTML = imageGenModels.map(m =>
+      `<option value="${m.id}">${m.name} (${m.id})</option>`
+    ).join('');
+  } else {
+    select.innerHTML = '<option value="">No image generation models available</option>';
+  }
+}
+
 async function adminPerformReranking() {
   const model = document.getElementById('admin-reranking-model-select').value;
   const query = document.getElementById('admin-reranking-query').value.trim();
@@ -1634,5 +1650,94 @@ async function adminPerformReranking() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Rerank Documents';
+  }
+}
+
+// Image Generation test function
+async function adminGenerateImage() {
+  const model = document.getElementById('admin-imagegen-model-select').value;
+  const prompt = document.getElementById('admin-imagegen-prompt').value.trim();
+  const n = document.getElementById('admin-imagegen-n').value;
+  const size = document.getElementById('admin-imagegen-size').value;
+  const quality = document.getElementById('admin-imagegen-quality').value;
+  const btn = document.getElementById('admin-imagegen-btn');
+  const resultDiv = document.getElementById('admin-imagegen-result');
+  const imagesDiv = document.getElementById('admin-imagegen-images');
+
+  // Validation
+  if (!model) {
+    alert('Please select an image generation model');
+    return;
+  }
+
+  if (!prompt) {
+    alert('Please enter a prompt');
+    return;
+  }
+
+  // Get first enabled API key for testing
+  const testApiKey = apiKeys.find(k => k.enabled);
+  if (!testApiKey) {
+    alert('No enabled API key found. Please enable at least one API key in the API Keys tab.');
+    return;
+  }
+
+  // Show loading state
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+  resultDiv.style.display = 'none';
+
+  try {
+    const requestBody = {
+      model: model,
+      prompt: prompt,
+      n: parseInt(n) || 1,
+      size: size
+    };
+
+    if (quality) {
+      requestBody.quality = quality;
+    }
+
+    const response = await fetch('/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${testApiKey.key}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || 'Failed to generate image');
+    }
+
+    const data = await response.json();
+
+    if (!data.data || !Array.isArray(data.data)) {
+      throw new Error('Invalid response format');
+    }
+
+    // Display images
+    imagesDiv.innerHTML = data.data.map((item, idx) => {
+      const imageUrl = item.url || item.b64_json;
+      const imgSrc = item.b64_json ? `data:image/png;base64,${item.b64_json}` : imageUrl;
+      return `
+        <div style="border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: white;">
+          <img src="${imgSrc}" alt="Generated image ${idx + 1}" style="width: 100%; height: auto; display: block;">
+          <div style="padding: 10px;">
+            <a href="${imgSrc}" target="_blank" class="btn" style="display: inline-block; font-size: 12px; padding: 8px 12px; text-decoration: none;">Open Image</a>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    resultDiv.style.display = 'block';
+  } catch (error) {
+    alert(`Error: ${error.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate Image';
   }
 }

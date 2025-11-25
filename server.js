@@ -1480,6 +1480,118 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 200, response.data);
     }
 
+    // POST /v1/images/generations
+    if (req.method === 'POST' && req.url === '/v1/images/generations') {
+      // Authenticate
+      const apiKey = authenticate(req);
+      if (!apiKey) {
+        return sendJSON(res, 401, {
+          error: {
+            message: 'Invalid authentication credentials',
+            type: 'invalid_request_error',
+            code: 'invalid_api_key'
+          }
+        });
+      }
+
+      const body = await parseBody(req);
+      const { model, prompt, n, size, quality, response_format, ...params } = body;
+
+      // Validate input
+      if (!prompt) {
+        return sendJSON(res, 400, {
+          error: {
+            message: 'Missing required parameter: prompt',
+            type: 'invalid_request_error',
+            code: 'missing_prompt'
+          }
+        });
+      }
+
+      // Check if model is supported
+      const modelConfig = MODEL_ROUTES[model];
+      if (!modelConfig) {
+        return sendJSON(res, 400, {
+          error: {
+            message: `Model '${model}' not supported. Available models: ${Object.keys(MODEL_ROUTES).join(', ')}`,
+            type: 'invalid_request_error',
+            code: 'model_not_found'
+          }
+        });
+      }
+
+      // Validate model type
+      if (modelConfig.type !== 'image') {
+        return sendJSON(res, 400, {
+          error: {
+            message: `Model '${model}' is not an image generation model. Please use a model with type 'image'.`,
+            type: 'invalid_request_error',
+            code: 'invalid_model_type'
+          }
+        });
+      }
+
+      const providerName = modelConfig.providerId;
+
+      // Check if API key has permission to use this model
+      const allowedModels = apiKey.allowedModels || [];
+      if (allowedModels.length > 0 && !allowedModels.includes(model)) {
+        return sendJSON(res, 403, {
+          error: {
+            message: `Access denied. This API key does not have permission to use model '${model}'.`,
+            type: 'permission_error',
+            code: 'model_not_allowed'
+          }
+        });
+      }
+
+      const provider = PROVIDERS[providerName];
+      if (!provider || !provider.apiKey) {
+        return sendJSON(res, 500, {
+          error: {
+            message: `Provider '${providerName}' not configured. Missing API key.`,
+            type: 'server_error',
+            code: 'provider_not_configured'
+          }
+        });
+      }
+
+      console.log(`[${new Date().toISOString()}] Image Generation: ${model} -> ${providerName}`);
+
+      // Build image generation request
+      const imageRequest = {
+        model: model,
+        prompt: prompt,
+        n: n || 1,
+        size: size || '1024x1024',
+        quality: quality,
+        response_format: response_format || 'url',
+        ...params
+      };
+
+      const response = await makeRequest(
+        `${provider.baseUrl}/v1/images/generations`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${provider.apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 300000 // 5 minutes for image generation
+        },
+        imageRequest
+      );
+
+      console.log(`[${new Date().toISOString()}] ${providerName} image generation response: ${response.status}`);
+
+      if (response.status !== 200) {
+        return sendJSON(res, response.status, response.data);
+      }
+
+      // Return image generation response
+      return sendJSON(res, 200, response.data);
+    }
+
     // POST /v1/audio/transcriptions
     if (req.method === 'POST' && req.url === '/v1/audio/transcriptions') {
       // Authenticate
