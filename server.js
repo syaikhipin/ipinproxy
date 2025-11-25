@@ -1570,7 +1570,7 @@ const server = http.createServer(async (req, res) => {
       };
 
       const response = await makeRequest(
-        `${provider.baseUrl}/v1/images/generations`,
+        `${provider.baseUrl}/images/generations`,
         {
           method: 'POST',
           headers: {
