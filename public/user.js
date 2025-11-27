@@ -491,6 +491,91 @@ print(response.json())`;
 const data = await response.json();
 console.log(data);`;
 
+  } else if (modelType === 'ocr') {
+    // OCR examples
+    curlExample = `curl ${baseUrl}/v1/ocr \\
+  -H "Authorization: Bearer ${apiKey}" \\
+  -F model="${exampleModel}" \\
+  -F file="@image.jpg"`;
+
+    pythonExample = `import requests
+
+url = "${baseUrl}/v1/ocr"
+headers = {
+    "Authorization": "Bearer ${apiKey}"
+}
+files = {
+    "file": open("image.jpg", "rb")
+}
+data = {
+    "model": "${exampleModel}"
+}
+
+response = requests.post(url, headers=headers, files=files, data=data)
+print(response.json())`;
+
+    jsExample = `const formData = new FormData();
+formData.append('file', imageFile);
+formData.append('model', '${exampleModel}');
+
+const response = await fetch('${baseUrl}/v1/ocr', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer ${apiKey}'
+  },
+  body: formData
+});
+
+const data = await response.json();
+console.log(data);`;
+
+  } else if (modelType === 'image') {
+    // Image generation examples
+    curlExample = `curl ${baseUrl}/v1/images/generations \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${apiKey}" \\
+  -d '{
+    "model": "${exampleModel}",
+    "prompt": "a beautiful sunset over the ocean",
+    "n": 1,
+    "size": "1024x1024"
+  }'`;
+
+    pythonExample = `import requests
+
+url = "${baseUrl}/v1/images/generations"
+headers = {
+    "Authorization": "Bearer ${apiKey}",
+    "Content-Type": "application/json"
+}
+data = {
+    "model": "${exampleModel}",
+    "prompt": "a beautiful sunset over the ocean",
+    "n": 1,
+    "size": "1024x1024"
+}
+
+response = requests.post(url, headers=headers, json=data)
+result = response.json()
+print(result["data"][0]["url"])  # Image URL`;
+
+    jsExample = `const response = await fetch('${baseUrl}/v1/images/generations', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer ${apiKey}',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    model: '${exampleModel}',
+    prompt: 'a beautiful sunset over the ocean',
+    n: 1,
+    size: '1024x1024'
+  })
+});
+
+const data = await response.json();
+console.log(data.data[0].url);  // Image URL`;
+
   } else {
     // Chat (default) examples
     curlExample = `curl ${baseUrl}/v1/chat/completions \\

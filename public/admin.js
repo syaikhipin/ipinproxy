@@ -998,8 +998,256 @@ function generateApiDocs() {
 
   const apiUrl = window.location.origin;
 
-  // Generate cURL example
-  const curlCode = `curl ${apiUrl}/v1/chat/completions \\
+  // Find the model to get its type
+  const selectedModel = models.find(m => m.id === modelId);
+  const modelType = selectedModel?.type || 'chat';
+
+  let curlCode, pythonCode, nodejsCode;
+
+  if (modelType === 'embedding') {
+    // Embedding examples
+    curlCode = `curl ${apiUrl}/v1/embeddings \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -d '{
+    "model": "${modelId}",
+    "input": "Your text here"
+  }'`;
+
+    pythonCode = `import requests
+
+url = "${apiUrl}/v1/embeddings"
+headers = {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer YOUR_API_KEY"
+}
+data = {
+    "model": "${modelId}",
+    "input": "Your text here"
+}
+
+response = requests.post(url, headers=headers, json=data)
+print(response.json())`;
+
+    nodejsCode = `const fetch = require('node-fetch');
+
+const url = '${apiUrl}/v1/embeddings';
+const headers = {
+  'Content-Type': 'application/json',
+  'Authorization': 'Bearer YOUR_API_KEY'
+};
+
+const data = {
+  model: '${modelId}',
+  input: 'Your text here'
+};
+
+fetch(url, {
+  method: 'POST',
+  headers: headers,
+  body: JSON.stringify(data)
+})
+  .then(res => res.json())
+  .then(result => console.log(result))
+  .catch(error => console.error('Error:', error));`;
+
+  } else if (modelType === 'transcription') {
+    // Transcription examples
+    curlCode = `curl ${apiUrl}/v1/audio/transcriptions \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -F model="${modelId}" \\
+  -F file="@audio.mp3"`;
+
+    pythonCode = `import requests
+
+url = "${apiUrl}/v1/audio/transcriptions"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY"
+}
+files = {
+    "file": open("audio.mp3", "rb")
+}
+data = {
+    "model": "${modelId}"
+}
+
+response = requests.post(url, headers=headers, files=files, data=data)
+print(response.json())`;
+
+    nodejsCode = `const FormData = require('form-data');
+const fs = require('fs');
+const fetch = require('node-fetch');
+
+const formData = new FormData();
+formData.append('file', fs.createReadStream('audio.mp3'));
+formData.append('model', '${modelId}');
+
+const url = '${apiUrl}/v1/audio/transcriptions';
+const headers = {
+  'Authorization': 'Bearer YOUR_API_KEY'
+};
+
+fetch(url, {
+  method: 'POST',
+  headers: headers,
+  body: formData
+})
+  .then(res => res.json())
+  .then(result => console.log(result))
+  .catch(error => console.error('Error:', error));`;
+
+  } else if (modelType === 'reranking') {
+    // Reranking examples
+    curlCode = `curl ${apiUrl}/v1/rerank \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -d '{
+    "model": "${modelId}",
+    "query": "Apple",
+    "documents": ["apple", "banana", "fruit", "vegetable"]
+  }'`;
+
+    pythonCode = `import requests
+
+url = "${apiUrl}/v1/rerank"
+headers = {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer YOUR_API_KEY"
+}
+data = {
+    "model": "${modelId}",
+    "query": "Apple",
+    "documents": ["apple", "banana", "fruit", "vegetable"]
+}
+
+response = requests.post(url, headers=headers, json=data)
+print(response.json())`;
+
+    nodejsCode = `const fetch = require('node-fetch');
+
+const url = '${apiUrl}/v1/rerank';
+const headers = {
+  'Content-Type': 'application/json',
+  'Authorization': 'Bearer YOUR_API_KEY'
+};
+
+const data = {
+  model: '${modelId}',
+  query: 'Apple',
+  documents: ['apple', 'banana', 'fruit', 'vegetable']
+};
+
+fetch(url, {
+  method: 'POST',
+  headers: headers,
+  body: JSON.stringify(data)
+})
+  .then(res => res.json())
+  .then(result => console.log(result))
+  .catch(error => console.error('Error:', error));`;
+
+  } else if (modelType === 'ocr') {
+    // OCR examples
+    curlCode = `curl ${apiUrl}/v1/ocr \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -F model="${modelId}" \\
+  -F file="@image.jpg"`;
+
+    pythonCode = `import requests
+
+url = "${apiUrl}/v1/ocr"
+headers = {
+    "Authorization": "Bearer YOUR_API_KEY"
+}
+files = {
+    "file": open("image.jpg", "rb")
+}
+data = {
+    "model": "${modelId}"
+}
+
+response = requests.post(url, headers=headers, files=files, data=data)
+print(response.json())`;
+
+    nodejsCode = `const FormData = require('form-data');
+const fs = require('fs');
+const fetch = require('node-fetch');
+
+const formData = new FormData();
+formData.append('file', fs.createReadStream('image.jpg'));
+formData.append('model', '${modelId}');
+
+const url = '${apiUrl}/v1/ocr';
+const headers = {
+  'Authorization': 'Bearer YOUR_API_KEY'
+};
+
+fetch(url, {
+  method: 'POST',
+  headers: headers,
+  body: formData
+})
+  .then(res => res.json())
+  .then(result => console.log(result))
+  .catch(error => console.error('Error:', error));`;
+
+  } else if (modelType === 'image') {
+    // Image generation examples
+    curlCode = `curl ${apiUrl}/v1/images/generations \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -d '{
+    "model": "${modelId}",
+    "prompt": "a beautiful sunset over the ocean",
+    "n": 1,
+    "size": "1024x1024"
+  }'`;
+
+    pythonCode = `import requests
+
+url = "${apiUrl}/v1/images/generations"
+headers = {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer YOUR_API_KEY"
+}
+data = {
+    "model": "${modelId}",
+    "prompt": "a beautiful sunset over the ocean",
+    "n": 1,
+    "size": "1024x1024"
+}
+
+response = requests.post(url, headers=headers, json=data)
+result = response.json()
+print(result["data"][0]["url"])  # Image URL`;
+
+    nodejsCode = `const fetch = require('node-fetch');
+
+const url = '${apiUrl}/v1/images/generations';
+const headers = {
+  'Content-Type': 'application/json',
+  'Authorization': 'Bearer YOUR_API_KEY'
+};
+
+const data = {
+  model: '${modelId}',
+  prompt: 'a beautiful sunset over the ocean',
+  n: 1,
+  size: '1024x1024'
+};
+
+fetch(url, {
+  method: 'POST',
+  headers: headers,
+  body: JSON.stringify(data)
+})
+  .then(res => res.json())
+  .then(result => console.log(result.data[0].url))
+  .catch(error => console.error('Error:', error));`;
+
+  } else {
+    // Chat (default) examples
+    curlCode = `curl ${apiUrl}/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -d '{
@@ -1014,8 +1262,7 @@ function generateApiDocs() {
     "temperature": 0.7
   }'`;
 
-  // Generate Python example
-  const pythonCode = `import requests
+    pythonCode = `import requests
 
 url = "${apiUrl}/v1/chat/completions"
 headers = {
@@ -1039,8 +1286,7 @@ response = requests.post(url, headers=headers, json=data)
 result = response.json()
 print(result["choices"][0]["message"]["content"])`;
 
-  // Generate Node.js example
-  const nodejsCode = `const fetch = require('node-fetch');
+    nodejsCode = `const fetch = require('node-fetch');
 
 const url = '${apiUrl}/v1/chat/completions';
 const headers = {
@@ -1072,6 +1318,7 @@ fetch(url, {
   .catch(error => {
     console.error('Error:', error);
   });`;
+  }
 
   document.getElementById('apidocs-curl').textContent = curlCode;
   document.getElementById('apidocs-python').textContent = pythonCode;
