@@ -182,6 +182,79 @@ function makeRequest(url, options, data) {
   });
 }
 
+// Make streaming request for SSE (Server-Sent Events)
+function makeStreamingRequest(url, options, data, clientRes) {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url);
+    const requestOptions = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || 443,
+      path: parsedUrl.pathname,
+      method: options.method || 'POST',
+      headers: options.headers || {},
+      timeout: options.timeout || 120000
+    };
+
+    const req = https.request(requestOptions, (res) => {
+      // Check for non-200 status - return error as JSON
+      if (res.statusCode !== 200) {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          try {
+            resolve({ status: res.statusCode, data: JSON.parse(body), streaming: false });
+          } catch (e) {
+            resolve({ status: res.statusCode, data: body, streaming: false });
+          }
+        });
+        return;
+      }
+
+      // Set SSE headers on client response
+      clientRes.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*'
+      });
+
+      // Pipe streaming data directly to client
+      res.on('data', chunk => {
+        clientRes.write(chunk);
+      });
+
+      res.on('end', () => {
+        clientRes.end();
+        resolve({ status: 200, streaming: true });
+      });
+
+      res.on('error', (err) => {
+        console.error('Streaming response error:', err);
+        clientRes.end();
+        reject(err);
+      });
+    });
+
+    req.on('error', (err) => {
+      console.error('Streaming request error:', err);
+      reject(err);
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Request timeout'));
+    });
+
+    // Handle client disconnect
+    clientRes.on('close', () => {
+      req.destroy();
+    });
+
+    if (data) req.write(JSON.stringify(data));
+    req.end();
+  });
+}
+
 // Make multipart/form-data request (for audio uploads)
 function makeMultipartRequest(url, options, formData) {
   return new Promise((resolve, reject) => {
@@ -1244,6 +1317,47 @@ const server = http.createServer(async (req, res) => {
         ...params
       };
 
+      // Handle streaming requests
+      if (stream) {
+        console.log(`[${new Date().toISOString()}] Streaming request for ${model} -> ${providerName}`);
+
+        try {
+          const response = await makeStreamingRequest(
+            `${provider.baseUrl}/chat/completions`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${provider.apiKey}`,
+                'Content-Type': 'application/json'
+              },
+              timeout: 120000
+            },
+            providerRequest,
+            res
+          );
+
+          // If streaming was successful, response is already sent
+          if (response.streaming) {
+            console.log(`[${new Date().toISOString()}] Streaming completed for ${model}`);
+            return;
+          }
+
+          // If not streaming (error case), send JSON error
+          console.log(`[${new Date().toISOString()}] ${providerName} streaming error: ${response.status}`);
+          return sendJSON(res, response.status, response.data);
+        } catch (error) {
+          console.error(`[${new Date().toISOString()}] Streaming error:`, error.message);
+          return sendJSON(res, 500, {
+            error: {
+              message: `Streaming error: ${error.message}`,
+              type: 'server_error',
+              code: 'streaming_failed'
+            }
+          });
+        }
+      }
+
+      // Non-streaming request
       const response = await makeRequest(
         `${provider.baseUrl}/chat/completions`,
         {
