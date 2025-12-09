@@ -598,6 +598,7 @@ document.getElementById('user-form').addEventListener('submit', async (e) => {
 // Chat functionality
 let chatMessages = [];
 let chatApiKey = null;
+let chatModels = []; // Store loaded models with their capabilities
 let currentImage = null; // Store current image as base64
 
 async function loadChatModels() {
@@ -627,12 +628,16 @@ async function loadChatModels() {
     const select = document.getElementById('chat-model-select');
 
     if (data.data && data.data.length > 0) {
+      // Store models with their capabilities from the database
+      chatModels = data.data;
       select.innerHTML = data.data.map(m => {
-        const hasVision = supportsVision(m.id);
+        // Use supports_image_upload from API response (from database)
+        const hasVision = m.supports_image_upload === true;
         const visionIcon = hasVision ? '📷 ' : '';
         return `<option value="${m.id}">${visionIcon}${m.id}</option>`;
       }).join('');
     } else {
+      chatModels = [];
       select.innerHTML = '<option value="">No models available</option>';
     }
   } catch (error) {
@@ -911,24 +916,10 @@ function removeImage() {
   document.getElementById('image-upload').value = '';
 }
 
-// Check if model supports vision
+// Check if model supports vision (uses data from database via API)
 function supportsVision(modelId) {
-  const visionModels = [
-    'claude-sonnet',
-    'claude-opus',
-    'claude-haiku',
-    'gpt-4-vision',
-    'gpt-4-turbo',
-    'gpt-4o',
-    'gemini-2.5-pro',
-    'gemini-1.5-pro',
-    'gemini-1.5-flash',
-    'qwen-vl',
-    'qwen2-vl',
-    'qwen3-vl-plus'
-  ];
-
-  return visionModels.some(vm => modelId.toLowerCase().includes(vm));
+  const model = chatModels.find(m => m.id === modelId);
+  return model?.supports_image_upload === true;
 }
 
 // Keyboard shortcut for chat

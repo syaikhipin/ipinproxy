@@ -1210,7 +1210,9 @@ const server = http.createServer(async (req, res) => {
         object: 'model',
         created: Date.now(),
         owned_by: MODEL_ROUTES[modelId]?.providerId || 'unknown',
-        type: MODEL_ROUTES[modelId]?.type || 'chat'
+        type: MODEL_ROUTES[modelId]?.type || 'chat',
+        supports_image_upload: MODEL_ROUTES[modelId]?.supportsImageUpload || false,
+        supports_video_upload: MODEL_ROUTES[modelId]?.supportsVideoUpload || false
       }));
 
       return sendJSON(res, 200, {
