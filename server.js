@@ -186,25 +186,35 @@ function makeRequest(url, options, data) {
 function makeStreamingRequest(url, options, data, clientRes) {
   return new Promise((resolve, reject) => {
     const parsedUrl = new URL(url);
+    const fullPath = parsedUrl.pathname + (parsedUrl.search || '');
+
     const requestOptions = {
       hostname: parsedUrl.hostname,
       port: parsedUrl.port || 443,
-      path: parsedUrl.pathname,
+      path: fullPath,
       method: options.method || 'POST',
-      headers: options.headers || {},
+      headers: {
+        ...options.headers,
+        'Accept': 'text/event-stream'
+      },
       timeout: options.timeout || 120000
     };
 
+    console.log(`[${new Date().toISOString()}] Streaming to: ${parsedUrl.hostname}${fullPath}`);
+
     const req = https.request(requestOptions, (res) => {
+      console.log(`[${new Date().toISOString()}] Upstream status: ${res.statusCode}, content-type: ${res.headers['content-type']}`);
+
       // Check for non-200 status - return error as JSON
       if (res.statusCode !== 200) {
         let body = '';
         res.on('data', chunk => body += chunk);
         res.on('end', () => {
+          console.log(`[${new Date().toISOString()}] Upstream error response: ${body.substring(0, 500)}`);
           try {
             resolve({ status: res.statusCode, data: JSON.parse(body), streaming: false });
           } catch (e) {
-            resolve({ status: res.statusCode, data: body, streaming: false });
+            resolve({ status: res.statusCode, data: { error: { message: body } }, streaming: false });
           }
         });
         return;
@@ -215,38 +225,49 @@ function makeStreamingRequest(url, options, data, clientRes) {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
         'Access-Control-Allow-Origin': '*'
       });
 
+      let chunkCount = 0;
+
       // Pipe streaming data directly to client
       res.on('data', chunk => {
+        chunkCount++;
         clientRes.write(chunk);
+        // Flush immediately for real-time streaming
+        if (typeof clientRes.flush === 'function') {
+          clientRes.flush();
+        }
       });
 
       res.on('end', () => {
+        console.log(`[${new Date().toISOString()}] Streaming completed, ${chunkCount} chunks sent`);
         clientRes.end();
         resolve({ status: 200, streaming: true });
       });
 
       res.on('error', (err) => {
-        console.error('Streaming response error:', err);
+        console.error(`[${new Date().toISOString()}] Streaming response error:`, err);
         clientRes.end();
         reject(err);
       });
     });
 
     req.on('error', (err) => {
-      console.error('Streaming request error:', err);
+      console.error(`[${new Date().toISOString()}] Streaming request error:`, err);
       reject(err);
     });
 
     req.on('timeout', () => {
+      console.error(`[${new Date().toISOString()}] Streaming request timeout`);
       req.destroy();
       reject(new Error('Request timeout'));
     });
 
     // Handle client disconnect
     clientRes.on('close', () => {
+      console.log(`[${new Date().toISOString()}] Client disconnected, aborting upstream request`);
       req.destroy();
     });
 
@@ -395,6 +416,10 @@ function parseMultipartFormData(req) {
 
 // Send JSON response
 function sendJSON(res, status, data) {
+  if (res.headersSent) {
+    console.error(`[${new Date().toISOString()}] Cannot send JSON - headers already sent`);
+    return;
+  }
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(data));
 }
